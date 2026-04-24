@@ -10,6 +10,9 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
@@ -24,24 +27,23 @@ jobs:
       - name: Build with Maven
         run: mvn package
 
-      # Only run the steps below when pushing a version tag
       - name: Get version from pom.xml
         if: startsWith(github.ref, 'refs/tags/v')
         id: version
-        run: echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $env:GITHUB_OUTPUT
+        run: echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
 
       - name: Create installer with jpackage
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          jpackage `
-            --input target/ `
-            --main-jar aws-idp-saml-swing-all.jar `
-            --main-class com.your.package.MainClass `
-            --name "AWS IDP SAML" `
-            --app-version ${{ steps.version.outputs.version }} `
-            --type exe `
-            --win-shortcut `
-            --win-menu `
+          jpackage \
+            --input target/ \
+            --main-jar aws-idp-saml-swing-all.jar \
+            --main-class com.ourgiant.saml.SwingMain \
+            --name "AWS IDP SAML" \
+            --app-version ${{ steps.version.outputs.version }} \
+            --type exe \
+            --win-shortcut \
+            --win-menu \
             --dest installer-output
 
       - name: Create GitHub Release
