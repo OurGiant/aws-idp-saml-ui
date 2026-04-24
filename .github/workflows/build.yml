@@ -43,15 +43,19 @@ jobs:
             --main-class com.ourgiant.saml.SwingMain \
             --name "AWS IDP SAML" \
             --app-version ${{ steps.version.outputs.version }} \
-            --type exe \
-            --win-shortcut \
-            --win-menu \
+            --type app-image \
             --dest installer-output
-
+            
+      - name: Zip app image
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          cd installer-output
+          7z a ../AWS-IDP-SAML-${{ steps.version.outputs.version }}.zip "AWS IDP SAML"
+          
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ github.ref_name }}
-          files: installer-output/*.exe
+          files: AWS-IDP-SAML-${{ steps.version.outputs.version }}.zip
           generate_release_notes: true
