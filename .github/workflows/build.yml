@@ -37,7 +37,7 @@ jobs:
         run: |
           jpackage \
             --input target/ \
-            --main-jar aws-idp-saml-swing-all.jar \
+            --main-jar aws-idp-saml-ui-all.jar \
             --main-class com.ourgiant.saml.SwingMain \
             --name "AWS IDP SAML" \
             --app-version ${{ steps.version.outputs.version }} \
