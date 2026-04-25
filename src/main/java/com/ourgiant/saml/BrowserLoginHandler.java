@@ -181,15 +181,38 @@ public class BrowserLoginHandler {
     }
 
     private void clickOktaMfaSelection() {
+        By selectionLocator = By.xpath(
+            "//a[@aria-label='Select to get a push notification to the Okta Verify app.']"
+            + " | //input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']"
+        );
+
+        // First check if autoChallenge is present is checked, which would indicate we can skip clicking the button
         try {
-            By selectionLocator = By.xpath(
-                "//a[@aria-label='Select to get a push notification to the Okta Verify app.']"
-                + " | //input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']"
-            );
+            WebElement autoChallengeElement = wait.until(ExpectedConditions.presenceOfElementLocated(By.name("autoChallenge")));
+            if (autoChallengeElement.isSelected()) {
+                logger.info("Okta auto-challenge is enabled, skipping click");
+                return;
+            } 
+        } catch (NoSuchElementException | TimeoutException e) {
+            logger.info("Okta auto-challenge element not found or not enabled, proceeding to click selection");
+        }
+
+        logger.info("Clicking Okta MFA push selection");
+
+        try {
             WebElement mfaOption = wait.until(ExpectedConditions.elementToBeClickable(selectionLocator));
             mfaOption.click();
         } catch (TimeoutException e) {
             throw new RuntimeException("Could not find Okta MFA push selection button on managed-device login screen", e);
+        }
+
+        // For some reason, on Windows we end up going from choose to get a push notification to a page that actually sends the notification. This does happen on Linux
+        // To account for this after we push the aria-lable Select button, we need to then push the Send Push with have the class button-primary and type submit
+        try {
+            WebElement sendPushButton = wait.until(ExpectedConditions.elementToBeClickable(By.xpath("//input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']")));
+            sendPushButton.click();
+        } catch (TimeoutException e) {
+            logger.info("Send Push button not found after clicking Okta Verify selection, which may be expected on some platforms");
         }
     }
 
