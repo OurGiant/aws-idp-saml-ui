@@ -142,7 +142,7 @@ public class SamlAuthenticator {
 
     private WebDriver createFirefoxDriver() {
         FirefoxOptions options = new FirefoxOptions();
-        // options.addArguments("--headless");
+        options.addArguments("--headless");
         System.setProperty("webdriver.manager.stats", "false");
 
         // Set webdriver.gecko.driver if not set
