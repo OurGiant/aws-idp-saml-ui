@@ -91,7 +91,7 @@ public class SwingMain extends JFrame {
         profilePanel.add(requestCredentialsButton);
 
         useFastPassCheckBox = new JCheckBox("Use Okta FastPass");
-        useFastPassCheckBox.setSelected(true);
+        useFastPassCheckBox.setSelected(false);
         profilePanel.add(useFastPassCheckBox);
 
         showEncryptedButton = new JButton("Encrypted");
