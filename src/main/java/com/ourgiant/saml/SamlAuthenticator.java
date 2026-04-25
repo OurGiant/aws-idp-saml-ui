@@ -124,6 +124,7 @@ public class SamlAuthenticator {
 
     private WebDriver createChromeDriver() {
         ChromeOptions options = new ChromeOptions();
+        System.setProperty("webdriver.manager.stats", "false");
         options.addArguments("--headless"); // Run headless
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
@@ -141,7 +142,8 @@ public class SamlAuthenticator {
 
     private WebDriver createFirefoxDriver() {
         FirefoxOptions options = new FirefoxOptions();
-        options.addArguments("--headless");
+        // options.addArguments("--headless");
+        System.setProperty("webdriver.manager.stats", "false");
 
         // Set webdriver.gecko.driver if not set
         if (System.getProperty("webdriver.gecko.driver") == null) {
