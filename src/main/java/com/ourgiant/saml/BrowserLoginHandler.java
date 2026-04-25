@@ -65,12 +65,13 @@ public class BrowserLoginHandler {
 
         // Wait for and fill username field
         try {
-            WebElement usernameField = wait.until(ExpectedConditions.elementToBeClickable(By.id("okta-signin-username")));
+            WebElement usernameField = wait.until(ExpectedConditions.elementToBeClickable(By.name("identifier")));
             usernameField.clear();
             usernameField.sendKeys(username);
 
             // Click next/sign in
-            WebElement nextButton = wait.until(ExpectedConditions.elementToBeClickable(By.id("okta-signin-submit")));
+            // <input class="button button-primary" type="submit" value="Next" data-type="save">
+            WebElement nextButton = wait.until(ExpectedConditions.elementToBeClickable(By.className("button-primary")));
             nextButton.click();
         } catch (TimeoutException e) {
             logger.info("Okta username field not found; checking for managed-device MFA flow");
@@ -81,21 +82,27 @@ public class BrowserLoginHandler {
             }
             throw e;
         }
+        // Check for interstitial page that may require clicking through before password entry
 
-        // Wait for password field or MFA
+        logger.info("Checking for intermediate verification page");
+        if (isIntermediateVerifificationPage()) {
+            logger.info("Handling intermediate verification page");
+            clickUsePassword();
+        }
+
         try {
-            // Try to find password field
-            WebElement passwordField = wait.until(ExpectedConditions.elementToBeClickable(By.id("okta-signin-password")));
+            WebElement passwordField = wait.until(ExpectedConditions.elementToBeClickable(By.name("credentials.passcode")));
             String password = promptForPassword();
             passwordField.clear();
             passwordField.sendKeys(password);
 
             // Submit password
-            WebElement signInButton = wait.until(ExpectedConditions.elementToBeClickable(By.id("okta-signin-submit")));
+            WebElement signInButton = wait.until(ExpectedConditions.elementToBeClickable(By.className("button-primary")));
             signInButton.click();
+
         } catch (TimeoutException e) {
-            // Password field not found, might be MFA or different flow
-            logger.info("Password field not found, waiting for MFA or redirect");
+            logger.warn("Password field not found on intermediate verification page; checking for managed-device MFA flow");
+            throw e;
         }
 
         if (useOktaFastPass) {
@@ -106,6 +113,39 @@ public class BrowserLoginHandler {
 
         // Wait for SAML response or AWS sign-in page
         return waitForSamlResponse();
+    }
+
+    private boolean isIntermediateVerifificationPage() { 
+        try {
+            WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(10));
+            shortWait.until(ExpectedConditions.presenceOfElementLocated(By.linkText("Back to sign in")));
+        } catch (TimeoutException e) {
+            logger.info("Not on intermediate verification page");
+            return false;
+        }
+        logger.info("Detected intermediate verification page");
+        try { 
+            Thread.sleep(2000); // Wait for potential redirect to occur
+            String pageSource = driver.getPageSource();
+            boolean hasVerifyIndicator = pageSource.contains("class=\"button select-factor link-button\"");
+            return true;
+        }
+        catch (Exception e) {
+            logger.warn("Error while checking for intermediate verification page", e);
+            return false;
+        }
+    }
+
+    private void clickUsePassword() {
+        try {
+            By usePasswordLocator = By.xpath(
+                "//a[@aria-label='Select Password.']" 
+            );
+            WebElement usePasswordOption = wait.until(ExpectedConditions.elementToBeClickable(usePasswordLocator));
+            usePasswordOption.click();
+        } catch (TimeoutException e) {
+            logger.warn("Could not find option to switch to password entry on intermediate verification page", e);
+        }
     }
 
     private boolean isPreAuthenticatedOktaMfaScreen() {
@@ -141,15 +181,38 @@ public class BrowserLoginHandler {
     }
 
     private void clickOktaMfaSelection() {
+        By selectionLocator = By.xpath(
+            "//a[@aria-label='Select to get a push notification to the Okta Verify app.']"
+            + " | //input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']"
+        );
+
+        // First check if autoChallenge is present is checked, which would indicate we can skip clicking the button
         try {
-            By selectionLocator = By.xpath(
-                "//a[@aria-label='Select to get a push notification to the Okta Verify app.']"
-                + " | //input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']"
-            );
+            WebElement autoChallengeElement = wait.until(ExpectedConditions.presenceOfElementLocated(By.name("autoChallenge")));
+            if (autoChallengeElement.isSelected()) {
+                logger.info("Okta auto-challenge is enabled, skipping click");
+                return;
+            } 
+        } catch (NoSuchElementException | TimeoutException e) {
+            logger.info("Okta auto-challenge element not found or not enabled, proceeding to click selection");
+        }
+
+        logger.info("Clicking Okta MFA push selection");
+
+        try {
             WebElement mfaOption = wait.until(ExpectedConditions.elementToBeClickable(selectionLocator));
             mfaOption.click();
         } catch (TimeoutException e) {
             throw new RuntimeException("Could not find Okta MFA push selection button on managed-device login screen", e);
+        }
+
+        // For some reason, on Windows we end up going from choose to get a push notification to a page that actually sends the notification. This does happen on Linux
+        // To account for this after we push the aria-lable Select button, we need to then push the Send Push with have the class button-primary and type submit
+        try {
+            WebElement sendPushButton = wait.until(ExpectedConditions.elementToBeClickable(By.xpath("//input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']")));
+            sendPushButton.click();
+        } catch (TimeoutException e) {
+            logger.info("Send Push button not found after clicking Okta Verify selection, which may be expected on some platforms");
         }
     }
 

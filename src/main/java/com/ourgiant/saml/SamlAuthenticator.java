@@ -17,6 +17,8 @@ import software.amazon.awssdk.services.sts.model.Credentials;
 
 import javax.swing.*;
 import java.nio.file.Files;
+import java.io.File;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -122,6 +124,7 @@ public class SamlAuthenticator {
 
     private WebDriver createChromeDriver() {
         ChromeOptions options = new ChromeOptions();
+        System.setProperty("webdriver.manager.stats", "false");
         options.addArguments("--headless"); // Run headless
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
@@ -140,6 +143,7 @@ public class SamlAuthenticator {
     private WebDriver createFirefoxDriver() {
         FirefoxOptions options = new FirefoxOptions();
         options.addArguments("--headless");
+        System.setProperty("webdriver.manager.stats", "false");
 
         // Set webdriver.gecko.driver if not set
         if (System.getProperty("webdriver.gecko.driver") == null) {
@@ -163,23 +167,37 @@ public class SamlAuthenticator {
             return driverPath.toAbsolutePath().toString();
         }
 
-        // Check drivers directory in project root
-        Path projectRoot = Paths.get(".").toAbsolutePath();
-        while (projectRoot.getParent() != null && !Files.exists(projectRoot.resolve("pom.xml"))) {
-            projectRoot = projectRoot.getParent();
+        // Check drivers directory relative to executable (works in packaged app-image)
+        Path executableDir;
+        try {
+            executableDir = Path.of(ProcessHandle.current()
+                .info()
+                .command()
+                .orElseThrow())
+                .getParent();
+        } catch (Exception e) {
+            executableDir = null;
         }
-        driverPath = projectRoot.resolve("drivers").resolve(driverName);
-        if (Files.exists(driverPath)) {
-            return driverPath.toAbsolutePath().toString();
+
+        if (executableDir != null) {
+            driverPath = executableDir.resolve("drivers").resolve(driverName);
+            if (Files.exists(driverPath)) {
+                return driverPath.toAbsolutePath().toString();
+            }
         }
 
         // Check system PATH
         String pathEnv = System.getenv("PATH");
         if (pathEnv != null) {
-            for (String path : pathEnv.split(";")) {
-                driverPath = Paths.get(path, driverName);
-                if (Files.exists(driverPath)) {
-                    return driverPath.toAbsolutePath().toString();
+            for (String dir : pathEnv.split(File.pathSeparator)) {
+                if (dir.startsWith("$") || dir.startsWith("%")) continue;
+                try {
+                    Path candidate = Paths.get(dir, driverName);
+                    if (Files.exists(candidate)) {
+                        return candidate.toAbsolutePath().toString();
+                    }
+                } catch (InvalidPathException e) {
+                    logger.warn("Skipping invalid PATH entry: {}", dir);
                 }
             }
         }
