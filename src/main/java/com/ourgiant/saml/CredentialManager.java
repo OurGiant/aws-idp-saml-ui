@@ -13,8 +13,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Manages AWS credentials reading and display
@@ -179,7 +177,10 @@ public class CredentialManager {
 
             // Ensure .aws directory exists
             File credFile = new File(credentialsFilePath);
-            credFile.getParentFile().mkdirs();
+            File parent = credFile.getParentFile();
+            if (parent != null) {
+                parent.mkdirs();
+            }
 
             credentials.store(credFile);
             logger.info("Credentials saved for profile: {}", profileName);

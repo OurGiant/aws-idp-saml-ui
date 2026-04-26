@@ -11,6 +11,7 @@ import org.xml.sax.InputSource;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,7 +29,7 @@ public class SamlParser {
 
         // Decode base64 SAML response
         byte[] decodedBytes = Base64.decodeBase64(samlResponse);
-        String decodedSaml = new String(decodedBytes, "UTF-8");
+        String decodedSaml = new String(decodedBytes, StandardCharsets.UTF_8);
 
         // Parse XML
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
