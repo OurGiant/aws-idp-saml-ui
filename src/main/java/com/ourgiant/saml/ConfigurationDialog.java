@@ -20,6 +20,7 @@ public class ConfigurationDialog extends JDialog {
     private JCheckBox storePasswordCheckBox;
     private JSpinner passwordExpirationSpinner;
     private JComboBox<String> themeComboBox;
+    private JCheckBox useFastPassCheckBox;
     private JButton saveButton;
     private JButton cancelButton;
 
@@ -88,6 +89,12 @@ public class ConfigurationDialog extends JDialog {
         }
         mainPanel.add(themeComboBox, gbc);
 
+        // FastPass option
+        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2;
+        useFastPassCheckBox = new JCheckBox("Use Okta FastPass");
+        mainPanel.add(useFastPassCheckBox, gbc);
+        gbc.gridwidth = 1;
+
         add(mainPanel, BorderLayout.CENTER);
 
         // Button panel
@@ -117,6 +124,8 @@ public class ConfigurationDialog extends JDialog {
 
         themeComboBox.setSelectedItem(databaseManager.getTheme());
 
+        useFastPassCheckBox.setSelected(databaseManager.getFastPassEnabled());
+
         updatePasswordExpirationEnabled();
     }
 
@@ -137,8 +146,11 @@ public class ConfigurationDialog extends JDialog {
                 String selectedTheme = (String) themeComboBox.getSelectedItem();
                 databaseManager.setTheme(selectedTheme);
 
-                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}",
-                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme);
+                boolean useFastPass = useFastPassCheckBox.isSelected();
+                databaseManager.setFastPassEnabled(useFastPass);
+
+                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, use_fastpass = {}",
+                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, useFastPass);
 
                 // Apply theme immediately
                 if (ThemeManager.applyTheme(selectedTheme)) {
