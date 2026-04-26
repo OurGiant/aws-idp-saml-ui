@@ -27,7 +27,6 @@ public class SwingMain extends JFrame {
     private static final Logger logger = LoggerFactory.getLogger(SwingMain.class);
 
     private JComboBox<String> profileComboBox;
-    private JCheckBox useFastPassCheckBox;
     private JButton requestCredentialsButton;
     private JButton showEncryptedButton;
     private JButton showCredentialsButton;
@@ -89,10 +88,6 @@ public class SwingMain extends JFrame {
         requestCredentialsButton = new JButton("Request Credentials");
         requestCredentialsButton.addActionListener(new RequestCredentialsListener());
         profilePanel.add(requestCredentialsButton);
-
-        useFastPassCheckBox = new JCheckBox("Use Okta FastPass");
-        useFastPassCheckBox.setSelected(false);
-        profilePanel.add(useFastPassCheckBox);
 
         showEncryptedButton = new JButton("Encrypted");
         showEncryptedButton.addActionListener(e -> showCredentialsDialog(true, false));
@@ -313,7 +308,7 @@ public class SwingMain extends JFrame {
                 @Override
                 protected Void doInBackground() throws Exception {
                     SamlAuthenticator authenticator = new SamlAuthenticator();
-                    authenticator.requestCredentials(selectedProfile, useFastPassCheckBox.isSelected());
+                    authenticator.requestCredentials(selectedProfile, databaseManager.getFastPassEnabled());
                     return null;
                 }
 
@@ -421,6 +416,8 @@ public class SwingMain extends JFrame {
     }
 
     public static void main(String[] args) {
+        System.setProperty("SE_AVOID_STATS", "true");
+
         SwingUtilities.invokeLater(() -> {
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());

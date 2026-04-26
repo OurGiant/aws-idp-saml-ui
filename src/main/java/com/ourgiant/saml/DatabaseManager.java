@@ -76,7 +76,8 @@ public class DatabaseManager {
             "session_duration", "14400", // 4 hours in seconds
             "min_duration", "900",      // 15 minutes in seconds
             "max_duration", "28800",    // 8 hours in seconds
-            "theme", "Flat Dark"        // Default to Flat Dark theme
+            "theme", "Flat Dark",       // Default to Flat Dark theme
+            "use_fastpass", "false"     // FastPass disabled by default
         };
 
         String insertSQL = "INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)";
@@ -151,6 +152,15 @@ public class DatabaseManager {
 
     public void setTheme(String theme) {
         setConfig("theme", theme);
+    }
+
+    public boolean getFastPassEnabled() {
+        String value = getConfig("use_fastpass");
+        return "true".equalsIgnoreCase(value);
+    }
+
+    public void setFastPassEnabled(boolean enabled) {
+        setConfig("use_fastpass", String.valueOf(enabled));
     }
 
     // Token state methods
