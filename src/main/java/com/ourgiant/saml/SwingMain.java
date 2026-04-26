@@ -27,6 +27,7 @@ public class SwingMain extends JFrame {
     private static final Logger logger = LoggerFactory.getLogger(SwingMain.class);
 
     private JComboBox<String> profileComboBox;
+    private JCheckBox showBrowserCheckBox;
     private JButton requestCredentialsButton;
     private JButton showEncryptedButton;
     private JButton showCredentialsButton;
@@ -88,6 +89,10 @@ public class SwingMain extends JFrame {
         requestCredentialsButton = new JButton("Request Credentials");
         requestCredentialsButton.addActionListener(new RequestCredentialsListener());
         profilePanel.add(requestCredentialsButton);
+
+        showBrowserCheckBox = new JCheckBox("Show browser");
+        showBrowserCheckBox.setSelected(false);
+        profilePanel.add(showBrowserCheckBox);
 
         showEncryptedButton = new JButton("Encrypted");
         showEncryptedButton.addActionListener(e -> showCredentialsDialog(true, false));
@@ -308,7 +313,7 @@ public class SwingMain extends JFrame {
                 @Override
                 protected Void doInBackground() throws Exception {
                     SamlAuthenticator authenticator = new SamlAuthenticator();
-                    authenticator.requestCredentials(selectedProfile, databaseManager.getFastPassEnabled());
+                    authenticator.requestCredentials(selectedProfile, databaseManager.getFastPassEnabled(), showBrowserCheckBox.isSelected());
                     return null;
                 }
 
