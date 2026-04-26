@@ -1,0 +1,12 @@
+# Snyk (https://snyk.io) policy file
+version: v1.25.0
+
+ignore:
+  snyk-code-java-crypto-hardcoded-key:
+    - src/main/java/com/ourgiant/saml/PasswordManager.java:
+        reason: >
+          GCM_TAG_LENGTH (128) is the NIST SP 800-38D recommended authentication
+          tag length for AES-GCM. It is a public algorithm parameter, not secret
+          material. The IV is correctly generated per-encryption via SecureRandom.
+        expires: 2099-01-01T00:00:00.000Z
+        created: 2026-04-26T00:00:00.000Z
