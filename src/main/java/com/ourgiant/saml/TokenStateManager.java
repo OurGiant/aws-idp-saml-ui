@@ -1,8 +1,5 @@
 package com.ourgiant.saml;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.time.Instant;
 
 /**
@@ -10,7 +7,6 @@ import java.time.Instant;
  * This class maintains backward compatibility with existing code.
  */
 public class TokenStateManager {
-    private static final Logger logger = LoggerFactory.getLogger(TokenStateManager.class);
     private final DatabaseManager databaseManager;
 
     public TokenStateManager() {
