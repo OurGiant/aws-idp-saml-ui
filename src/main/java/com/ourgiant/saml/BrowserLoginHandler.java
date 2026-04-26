@@ -20,12 +20,19 @@ public class BrowserLoginHandler {
     private final WebDriverWait wait;
     private final boolean useOktaFastPass;
     private final PasswordManager passwordManager;
+    private final boolean showBrowser;
+    private final String accountNumber;
+    private final String iamRole;
 
-    public BrowserLoginHandler(WebDriver driver, boolean useOktaFastPass, PasswordManager passwordManager) {
+    public BrowserLoginHandler(WebDriver driver, boolean useOktaFastPass, PasswordManager passwordManager,
+                                boolean showBrowser, String accountNumber, String iamRole) {
         this.driver = driver;
         this.wait = new WebDriverWait(driver, Duration.ofSeconds(30));
         this.useOktaFastPass = useOktaFastPass;
         this.passwordManager = passwordManager;
+        this.showBrowser = showBrowser;
+        this.accountNumber = accountNumber;
+        this.iamRole = iamRole;
     }
 
     /**
@@ -275,39 +282,77 @@ public class BrowserLoginHandler {
         wait.until(ExpectedConditions.urlContains("signin.aws.amazon.com"));
 
         // Try to find SAML response in form
+        String samlResponse = null;
         try {
             WebElement samlResponseElement = wait.until(
                 ExpectedConditions.presenceOfElementLocated(By.name("SAMLResponse"))
             );
 
-            String samlResponse = samlResponseElement.getAttribute("value");
+            samlResponse = samlResponseElement.getAttribute("value");
             if (samlResponse != null && !samlResponse.isEmpty()) {
                 logger.info("SAML response captured successfully");
-                return samlResponse;
             }
         } catch (TimeoutException e) {
             logger.warn("SAML response element not found, checking page source");
         }
 
         // Fallback: check page source for SAML response
-        String pageSource = driver.getPageSource();
-        if (pageSource.contains("SAMLResponse")) {
-            // Extract SAML response from page source
-            int startIndex = pageSource.indexOf("name=\"SAMLResponse\"");
-            if (startIndex > 0) {
-                int valueStart = pageSource.indexOf("value=\"", startIndex);
-                if (valueStart > 0) {
-                    valueStart += 7; // length of 'value="'
-                    int valueEnd = pageSource.indexOf("\"", valueStart);
-                    if (valueEnd > 0) {
-                        String samlResponse = pageSource.substring(valueStart, valueEnd);
-                        logger.info("SAML response extracted from page source");
-                        return samlResponse;
+        if (samlResponse == null || samlResponse.isEmpty()) {
+            String pageSource = driver.getPageSource();
+            if (pageSource != null && pageSource.contains("SAMLResponse")) {
+                int startIndex = pageSource.indexOf("name=\"SAMLResponse\"");
+                if (startIndex > 0) {
+                    int valueStart = pageSource.indexOf("value=\"", startIndex);
+                    if (valueStart > 0) {
+                        valueStart += 7; // length of 'value="'
+                        int valueEnd = pageSource.indexOf("\"", valueStart);
+                        if (valueEnd > 0) {
+                            samlResponse = pageSource.substring(valueStart, valueEnd);
+                            logger.info("SAML response extracted from page source");
+                        }
                     }
                 }
             }
         }
 
-        throw new RuntimeException("SAML response not found in AWS sign-in page");
+        if (samlResponse == null || samlResponse.isEmpty()) {
+            throw new RuntimeException("SAML response not found in AWS sign-in page");
+        }
+
+        if (showBrowser) {
+            selectRoleAndSignIn();
+        }
+
+        return samlResponse;
+    }
+
+    private void selectRoleAndSignIn() {
+        logger.info("Selecting role {}:{} on AWS SAML page", accountNumber, iamRole);
+
+        driver.manage().window().maximize();
+
+        // Role element ID is the full ARN; match by account number and role name
+        String roleXpath = String.format(
+            "//*[contains(@id, '::%s:') and contains(@id, '%s')]", accountNumber, iamRole
+        );
+
+        try {
+            WebElement roleElement = wait.until(ExpectedConditions.elementToBeClickable(By.xpath(roleXpath)));
+            roleElement.click();
+            logger.info("Role element clicked");
+        } catch (TimeoutException e) {
+            throw new RuntimeException(
+                String.format("Could not find role element for account %s / role %s on AWS SAML page", accountNumber, iamRole), e
+            );
+        }
+
+        // Design A: submit button present; Design B: click was sufficient
+        try {
+            WebElement signInButton = driver.findElement(By.id("signin_button"));
+            signInButton.click();
+            logger.info("Sign-in button clicked");
+        } catch (NoSuchElementException e) {
+            logger.info("No sign-in button found; assuming direct-link design");
+        }
     }
 }
