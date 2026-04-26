@@ -7,7 +7,6 @@ import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.firefox.FirefoxOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sts.StsClient;
@@ -15,13 +14,11 @@ import software.amazon.awssdk.services.sts.model.AssumeRoleWithSamlRequest;
 import software.amazon.awssdk.services.sts.model.AssumeRoleWithSamlResponse;
 import software.amazon.awssdk.services.sts.model.Credentials;
 
-import javax.swing.*;
 import java.nio.file.Files;
 import java.io.File;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Duration;
 
 /**
  * Handles SAML authentication and AWS credential generation
@@ -42,7 +39,7 @@ public class SamlAuthenticator {
     /**
      * Main method to request credentials for a profile
      */
-    public void requestCredentials(String profileName, boolean useOktaFastPass) throws Exception {
+    public void requestCredentials(String profileName, boolean useOktaFastPass, boolean showBrowser) throws Exception {
         logger.info("Starting credential request for profile: {}", profileName);
 
         // Get profile configuration
@@ -71,7 +68,7 @@ public class SamlAuthenticator {
         }
 
         // Perform browser login and get SAML response
-        String samlResponse = performBrowserLogin(loginUrl, loginTitle, username, useOktaFastPass);
+        String samlResponse = performBrowserLogin(loginUrl, loginTitle, username, useOktaFastPass, showBrowser, accountNumber, iamRole);
 
         // Parse SAML and get role ARN
         SamlParser samlParser = new SamlParser();
@@ -93,15 +90,20 @@ public class SamlAuthenticator {
     /**
      * Perform browser login and capture SAML response
      */
-    private String performBrowserLogin(String loginUrl, String loginTitle, String username, boolean useOktaFastPass) throws Exception {
+    private String performBrowserLogin(String loginUrl, String loginTitle, String username,
+                                        boolean useOktaFastPass, boolean showBrowser,
+                                        String accountNumber, String iamRole) throws Exception {
         logger.info("Starting browser login to: {}", loginUrl);
 
-        WebDriver driver = createWebDriver();
+        WebDriver driver = createWebDriver(showBrowser);
         try {
-            BrowserLoginHandler loginHandler = new BrowserLoginHandler(driver, useOktaFastPass, passwordManager);
+            BrowserLoginHandler loginHandler = new BrowserLoginHandler(driver, useOktaFastPass, passwordManager, showBrowser, accountNumber, iamRole);
             return loginHandler.performLogin(loginUrl, loginTitle, username);
+        } catch (Exception e) {
+            driver.quit();
+            throw e;
         } finally {
-            if (driver != null) {
+            if (!showBrowser) {
                 driver.quit();
             }
         }
@@ -110,22 +112,24 @@ public class SamlAuthenticator {
     /**
      * Create WebDriver instance based on configuration
      */
-    private WebDriver createWebDriver() {
+    private WebDriver createWebDriver(boolean showBrowser) {
         String browserType = configManager.getBrowserType().toLowerCase();
 
         switch (browserType) {
             case "firefox":
-                return createFirefoxDriver();
+                return createFirefoxDriver(showBrowser);
             case "chrome":
             default:
-                return createChromeDriver();
+                return createChromeDriver(showBrowser);
         }
     }
 
-    private WebDriver createChromeDriver() {
+    private WebDriver createChromeDriver(boolean showBrowser) {
         ChromeOptions options = new ChromeOptions();
         System.setProperty("webdriver.manager.stats", "false");
-        options.addArguments("--headless"); // Run headless
+        if (!showBrowser) {
+            options.addArguments("--headless");
+        }
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
 
@@ -140,9 +144,11 @@ public class SamlAuthenticator {
         return new ChromeDriver(options);
     }
 
-    private WebDriver createFirefoxDriver() {
+    private WebDriver createFirefoxDriver(boolean showBrowser) {
         FirefoxOptions options = new FirefoxOptions();
-        options.addArguments("--headless");
+        if (!showBrowser) {
+            options.addArguments("--headless");
+        }
         System.setProperty("webdriver.manager.stats", "false");
 
         // Set webdriver.gecko.driver if not set
