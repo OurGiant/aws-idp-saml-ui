@@ -18,6 +18,7 @@ public class ConfigurationDialog extends JDialog {
     private final PasswordManager passwordManager;
     private JSpinner durationSpinner;
     private JCheckBox storePasswordCheckBox;
+    private JButton forgetPasswordButton;
     private JSpinner passwordExpirationSpinner;
     private JComboBox<String> themeComboBox;
     private JCheckBox useFastPassCheckBox;
@@ -38,80 +39,146 @@ public class ConfigurationDialog extends JDialog {
     private void initializeUI() {
         setLayout(new BorderLayout());
 
-        // Main panel
-        JPanel mainPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
-        gbc.anchor = GridBagConstraints.WEST;
+        JPanel outerPanel = new JPanel(new GridBagLayout());
+        outerPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 4, 8));
 
-        // Session Duration
-        gbc.gridx = 0; gbc.gridy = 0;
-        mainPanel.add(new JLabel("Session Duration (minutes):"), gbc);
+        GridBagConstraints outerGbc = new GridBagConstraints();
+        outerGbc.fill = GridBagConstraints.HORIZONTAL;
+        outerGbc.weightx = 1.0;
+        outerGbc.gridx = 0;
+        outerGbc.insets = new Insets(3, 0, 3, 0);
 
-        gbc.gridx = 1;
-        durationSpinner = new JSpinner(new SpinnerNumberModel(
-            databaseManager.getSessionDuration() / 60, // Convert seconds to minutes
-            databaseManager.getMinDuration() / 60,     // Min in minutes
-            databaseManager.getMaxDuration() / 60,     // Max in minutes
-            15  // Step size in minutes
-        ));
-        mainPanel.add(durationSpinner, gbc);
+        outerGbc.gridy = 0; outerPanel.add(buildSessionSection(), outerGbc);
+        outerGbc.gridy = 1; outerPanel.add(buildPasswordSection(), outerGbc);
+        outerGbc.gridy = 2; outerPanel.add(buildAppearanceSection(), outerGbc);
+        outerGbc.gridy = 3; outerPanel.add(buildAuthSection(), outerGbc);
 
-        // Store Password Checkbox
-        gbc.gridx = 0; gbc.gridy = 1;
-        storePasswordCheckBox = new JCheckBox("Store and use Okta password");
-        storePasswordCheckBox.addActionListener(e -> updatePasswordExpirationEnabled());
-        mainPanel.add(storePasswordCheckBox, gbc);
+        add(outerPanel, BorderLayout.CENTER);
 
-        // Password Expiration
-        gbc.gridx = 0; gbc.gridy = 2;
-        mainPanel.add(new JLabel("Password Expiration (minutes):"), gbc);
-
-        gbc.gridx = 1;
-        passwordExpirationSpinner = new JSpinner(new SpinnerNumberModel(
-            databaseManager.getPasswordExpirationMinutes(),
-            15,      // Min 15 minutes
-            10080,   // Max 7 days (10080 minutes)
-            60       // Step size 1 hour
-        ));
-        passwordExpirationSpinner.setEnabled(false);
-        mainPanel.add(passwordExpirationSpinner, gbc);
-
-        // Theme selection
-        gbc.gridx = 0; gbc.gridy = 3;
-        mainPanel.add(new JLabel("Theme:"), gbc);
-
-        gbc.gridx = 1;
-        themeComboBox = new JComboBox<>();
-        String[] themes = ThemeManager.getAvailableThemeNames();
-        for (String theme : themes) {
-            themeComboBox.addItem(theme);
-        }
-        mainPanel.add(themeComboBox, gbc);
-
-        // FastPass option
-        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2;
-        useFastPassCheckBox = new JCheckBox("Use Okta FastPass");
-        mainPanel.add(useFastPassCheckBox, gbc);
-        gbc.gridwidth = 1;
-
-        add(mainPanel, BorderLayout.CENTER);
-
-        // Button panel
-        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         saveButton = new JButton("Save");
         cancelButton = new JButton("Cancel");
-
         saveButton.addActionListener(new SaveActionListener());
         cancelButton.addActionListener(e -> setVisible(false));
-
-        buttonPanel.add(saveButton);
         buttonPanel.add(cancelButton);
+        buttonPanel.add(saveButton);
         add(buttonPanel, BorderLayout.SOUTH);
+    }
+
+    private JPanel buildSessionSection() {
+        JPanel panel = titledPanel("Session");
+        GridBagConstraints gbc = sectionGbc();
+
+        gbc.gridx = 0; gbc.gridy = 0;
+        panel.add(new JLabel("Duration (minutes):"), gbc);
+
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        durationSpinner = new JSpinner(new SpinnerNumberModel(
+            databaseManager.getSessionDuration() / 60,
+            databaseManager.getMinDuration() / 60,
+            databaseManager.getMaxDuration() / 60,
+            15
+        ));
+        panel.add(durationSpinner, gbc);
+
+        return panel;
+    }
+
+    private JPanel buildPasswordSection() {
+        JPanel panel = titledPanel("Password Storage");
+        GridBagConstraints gbc = sectionGbc();
+
+        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
+        storePasswordCheckBox = new JCheckBox("Store and use Okta password");
+        storePasswordCheckBox.addActionListener(e -> updatePasswordExpirationEnabled());
+        panel.add(storePasswordCheckBox, gbc);
+        gbc.gridwidth = 1;
+
+        gbc.gridx = 0; gbc.gridy = 1;
+        panel.add(new JLabel("Expiration (minutes):"), gbc);
+
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        passwordExpirationSpinner = new JSpinner(new SpinnerNumberModel(
+            databaseManager.getPasswordExpirationMinutes(), 15, 10080, 60
+        ));
+        passwordExpirationSpinner.setEnabled(false);
+        panel.add(passwordExpirationSpinner, gbc);
+        gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+
+        gbc.gridx = 1; gbc.gridy = 2; gbc.anchor = GridBagConstraints.EAST;
+        forgetPasswordButton = new JButton("Forget Password");
+        forgetPasswordButton.setEnabled(false);
+        forgetPasswordButton.addActionListener(e -> forgetStoredPassword());
+        panel.add(forgetPasswordButton, gbc);
+
+        return panel;
+    }
+
+    private JPanel buildAppearanceSection() {
+        JPanel panel = titledPanel("Appearance");
+        GridBagConstraints gbc = sectionGbc();
+
+        gbc.gridx = 0; gbc.gridy = 0;
+        panel.add(new JLabel("Theme:"), gbc);
+
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        themeComboBox = new JComboBox<>();
+        for (String theme : ThemeManager.getAvailableThemeNames()) {
+            themeComboBox.addItem(theme);
+        }
+        panel.add(themeComboBox, gbc);
+
+        return panel;
+    }
+
+    private JPanel buildAuthSection() {
+        JPanel panel = titledPanel("Authentication");
+        GridBagConstraints gbc = sectionGbc();
+
+        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
+        useFastPassCheckBox = new JCheckBox("Use Okta FastPass");
+        panel.add(useFastPassCheckBox, gbc);
+
+        return panel;
+    }
+
+    private static JPanel titledPanel(String title) {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(BorderFactory.createTitledBorder(title));
+        return panel;
+    }
+
+    private static GridBagConstraints sectionGbc() {
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(4, 6, 4, 6);
+        gbc.anchor = GridBagConstraints.WEST;
+        return gbc;
     }
 
     private void updatePasswordExpirationEnabled() {
         passwordExpirationSpinner.setEnabled(storePasswordCheckBox.isSelected());
+        boolean hasStoredPassword = !isEmpty(databaseManager.getConfig("okta_password"));
+        forgetPasswordButton.setEnabled(hasStoredPassword);
+    }
+
+    private static boolean isEmpty(String s) {
+        return s == null || s.isEmpty();
+    }
+
+    private void forgetStoredPassword() {
+        int confirm = JOptionPane.showConfirmDialog(
+            this,
+            "Clear the stored Okta password? You will be prompted to enter it on next login.",
+            "Forget Password",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+        if (confirm == JOptionPane.YES_OPTION) {
+            passwordManager.clearPassword();
+            forgetPasswordButton.setEnabled(false);
+            logger.info("Stored password cleared by user");
+            JOptionPane.showMessageDialog(this, "Stored password cleared.", "Done", JOptionPane.INFORMATION_MESSAGE);
+        }
     }
 
     private void loadCurrentSettings() {
