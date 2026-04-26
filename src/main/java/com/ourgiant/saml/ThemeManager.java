@@ -1,7 +1,8 @@
 package com.ourgiant.saml;
 
-import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatGitHubDarkIJTheme;
+import com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatGitHubIJTheme;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,9 +26,10 @@ public class ThemeManager {
             AVAILABLE_THEMES.put(laf.getName(), new ThemeInfo(laf.getClassName(), false));
         }
 
-        // FlatLaf themes - modern flat design
+        // FlatLaf themes
         AVAILABLE_THEMES.put("Flat Light", new ThemeInfo(FlatLightLaf.class.getName(), true));
-        AVAILABLE_THEMES.put("Flat Dark", new ThemeInfo(FlatDarkLaf.class.getName(), true));
+        AVAILABLE_THEMES.put("GitHub Light", new ThemeInfo(FlatGitHubIJTheme.class.getName(), true));
+        AVAILABLE_THEMES.put("GitHub Dark", new ThemeInfo(FlatGitHubDarkIJTheme.class.getName(), true));
     }
 
     /**
@@ -49,12 +51,11 @@ public class ThemeManager {
 
         try {
             if (themeInfo.isFlatLaf) {
-                // FlatLaf themes
-                if (themeName.equals("Flat Dark")) {
-                    UIManager.setLookAndFeel(new FlatDarkLaf());
-                } else if (themeName.equals("Flat Light")) {
-                    UIManager.setLookAndFeel(new FlatLightLaf());
-                }
+                // Instantiate by class name — works for all FlatLaf and IntelliJ themes
+                LookAndFeel laf = (LookAndFeel) Class.forName(themeInfo.className)
+                    .getDeclaredConstructor()
+                    .newInstance();
+                UIManager.setLookAndFeel(laf);
             } else {
                 // Standard Swing LaF
                 UIManager.setLookAndFeel(themeInfo.className);
