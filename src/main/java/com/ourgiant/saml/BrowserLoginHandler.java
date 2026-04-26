@@ -13,6 +13,7 @@ import java.time.Duration;
 /**
  * Handles browser automation for SAML login
  */
+@SuppressWarnings("null") // Selenium's ExpectedConditions/@NonNull annotations are inconsistent with WebDriverWait.until()
 public class BrowserLoginHandler {
     private static final Logger logger = LoggerFactory.getLogger(BrowserLoginHandler.class);
 

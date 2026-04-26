@@ -22,12 +22,12 @@ public class ThemeManager {
         // System themes first
         UIManager.LookAndFeelInfo[] lafs = UIManager.getInstalledLookAndFeels();
         for (UIManager.LookAndFeelInfo laf : lafs) {
-            AVAILABLE_THEMES.put(laf.getName(), new ThemeInfo(laf.getName(), laf.getClassName(), false));
+            AVAILABLE_THEMES.put(laf.getName(), new ThemeInfo(laf.getClassName(), false));
         }
 
         // FlatLaf themes - modern flat design
-        AVAILABLE_THEMES.put("Flat Light", new ThemeInfo("Flat Light", FlatLightLaf.class.getName(), true));
-        AVAILABLE_THEMES.put("Flat Dark", new ThemeInfo("Flat Dark", FlatDarkLaf.class.getName(), true));
+        AVAILABLE_THEMES.put("Flat Light", new ThemeInfo(FlatLightLaf.class.getName(), true));
+        AVAILABLE_THEMES.put("Flat Dark", new ThemeInfo(FlatDarkLaf.class.getName(), true));
     }
 
     /**
@@ -71,12 +71,10 @@ public class ThemeManager {
      * Internal theme information class
      */
     private static class ThemeInfo {
-        String name;
         String className;
         boolean isFlatLaf;
 
-        ThemeInfo(String name, String className, boolean isFlatLaf) {
-            this.name = name;
+        ThemeInfo(String className, boolean isFlatLaf) {
             this.className = className;
             this.isFlatLaf = isFlatLaf;
         }
