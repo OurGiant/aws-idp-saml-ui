@@ -7,7 +7,7 @@
 
     <groupId>com.ourgiant</groupId>
     <artifactId>aws-idp-saml-ui</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.7</version>
     <packaging>jar</packaging>
 
     <name>AWS IDP SAML UI Client</name>
