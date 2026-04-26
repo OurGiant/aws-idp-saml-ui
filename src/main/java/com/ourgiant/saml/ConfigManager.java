@@ -55,11 +55,12 @@ public class ConfigManager {
         Set<String> sections = config.keySet();
 
         for (String section : sections) {
-            if (!section.startsWith("Fed-")) {
+            if (!section.startsWith("Fed-") && !section.equalsIgnoreCase("global")) {
                 profiles.add(section);
             }
         }
 
+        profiles.sort(String.CASE_INSENSITIVE_ORDER);
         return profiles;
     }
 
