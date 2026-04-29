@@ -346,13 +346,19 @@ public class SwingMain extends JFrame {
             // Disable button during processing
             requestCredentialsButton.setEnabled(false);
             requestCredentialsButton.setText("Requesting...");
+            statusLabel.setText("Starting credential request for profile: " + selectedProfile + "...");
 
             // Run credential request in background thread
             SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
                 @Override
                 protected Void doInBackground() throws Exception {
                     SamlAuthenticator authenticator = new SamlAuthenticator();
-                    authenticator.requestCredentials(selectedProfile, databaseManager.getFastPassEnabled(), showBrowserCheckBox.isSelected());
+                    authenticator.requestCredentials(
+                        selectedProfile,
+                        databaseManager.getFastPassEnabled(),
+                        showBrowserCheckBox.isSelected(),
+                        msg -> SwingUtilities.invokeLater(() -> statusLabel.setText(msg))
+                    );
                     return null;
                 }
 
