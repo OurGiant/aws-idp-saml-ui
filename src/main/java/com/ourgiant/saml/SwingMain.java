@@ -467,12 +467,23 @@ public class SwingMain extends JFrame {
 
     public static void main(String[] args) {
         System.setProperty("SE_AVOID_STATS", "true");
+        System.setProperty("awt.useSystemAAFontSettings", "on");
+        System.setProperty("swing.aatext", "true");
 
         SwingUtilities.invokeLater(() -> {
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             } catch (Exception e) {
                 // Use default look and feel
+            }
+
+            if (!ConfigManager.configFileExists()) {
+                DatabaseManager.deleteIfExists();
+                FirstRunSetupDialog setup = new FirstRunSetupDialog();
+                setup.setVisible(true);
+                if (!setup.isSetupCompleted()) {
+                    System.exit(0);
+                }
             }
 
             new SwingMain().setVisible(true);
