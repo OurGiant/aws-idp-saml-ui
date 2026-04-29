@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -23,13 +24,19 @@ public class ConfigManager {
     private final DatabaseManager databaseManager;
 
     public ConfigManager() {
-        // Use same path as Python version: ~/.aws/samlsts
+        this(true);
+    }
+
+    /** @param loadImmediately pass false when creating config for the first time (file not yet written) */
+    public ConfigManager(boolean loadImmediately) {
         String homeDir = System.getProperty("user.home");
         Path awsDir = Paths.get(homeDir, ".aws");
         this.configFilePath = awsDir.resolve("samlsts").toString();
         this.databaseManager = new DatabaseManager();
 
-        loadConfig();
+        if (loadImmediately) {
+            loadConfig();
+        }
     }
 
     private void loadConfig() {
@@ -253,5 +260,35 @@ public class ConfigManager {
             return global.get("browser", "chrome");
         }
         return "chrome";
+    }
+
+    /**
+     * Returns true if the config file exists on disk.
+     */
+    public static boolean configFileExists() {
+        String homeDir = System.getProperty("user.home");
+        Path configPath = Paths.get(homeDir, ".aws", "samlsts");
+        return configPath.toFile().exists();
+    }
+
+    /**
+     * Writes a new config file from the provided section map and reloads.
+     * Keys in the outer map are section names; inner map entries are key=value pairs.
+     */
+    public void createConfig(Map<String, Map<String, String>> sections) throws Exception {
+        File configFile = new File(configFilePath);
+        configFile.getParentFile().mkdirs();
+
+        Ini ini = new Ini();
+        for (Map.Entry<String, Map<String, String>> section : sections.entrySet()) {
+            ini.add(section.getKey());
+            for (Map.Entry<String, String> entry : section.getValue().entrySet()) {
+                ini.get(section.getKey()).add(entry.getKey(), entry.getValue());
+            }
+        }
+        ini.store(configFile);
+        logger.info("Configuration file created at: {}", configFilePath);
+
+        loadConfig();
     }
 }
