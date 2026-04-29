@@ -157,12 +157,52 @@ public class SwingMain extends JFrame {
 
         fileMenu.addSeparator();
 
+        JMenuItem aboutMenuItem = new JMenuItem("About...");
+        aboutMenuItem.addActionListener(e -> showAboutDialog());
+        fileMenu.add(aboutMenuItem);
+
+        fileMenu.addSeparator();
+
         JMenuItem exitMenuItem = new JMenuItem("Exit");
         exitMenuItem.addActionListener(e -> System.exit(0));
         fileMenu.add(exitMenuItem);
 
         menuBar.add(fileMenu);
         return menuBar;
+    }
+
+    private void showAboutDialog() {
+        String version = getClass().getPackage() != null ? getClass().getPackage().getImplementationVersion() : null;
+        if (version == null) {
+            version = "1.0.7";
+        }
+
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+
+        JLabel nameLabel = new JLabel("AWS IDP SAML UI");
+        nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 16f));
+        nameLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel versionLabel = new JLabel("Version " + version);
+        versionLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel descLabel = new JLabel("AWS SAML authentication client");
+        descLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel copyrightLabel = new JLabel("© OurGiant");
+        copyrightLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        panel.add(nameLabel);
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(versionLabel);
+        panel.add(Box.createVerticalStrut(4));
+        panel.add(descLabel);
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(copyrightLabel);
+
+        JOptionPane.showMessageDialog(this, panel, "About AWS IDP SAML UI", JOptionPane.PLAIN_MESSAGE);
     }
 
     private void setWindowIcon() {
