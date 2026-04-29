@@ -241,4 +241,20 @@ public class DatabaseManager {
             }
         }
     }
+
+    /**
+     * Deletes the database file if it exists. Used when no config file is present,
+     * indicating any existing database is a stale artifact from a prior environment.
+     */
+    public static void deleteIfExists() {
+        String homeDir = System.getProperty("user.home");
+        File dbFile = new File(homeDir + File.separator + ".aws" + File.separator + DB_NAME);
+        if (dbFile.exists()) {
+            if (dbFile.delete()) {
+                LoggerFactory.getLogger(DatabaseManager.class).info("Deleted stale database: {}", dbFile.getAbsolutePath());
+            } else {
+                LoggerFactory.getLogger(DatabaseManager.class).warn("Failed to delete stale database: {}", dbFile.getAbsolutePath());
+            }
+        }
+    }
 }
