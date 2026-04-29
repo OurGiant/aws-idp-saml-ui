@@ -478,6 +478,7 @@ public class SwingMain extends JFrame {
             }
 
             if (!ConfigManager.configFileExists()) {
+                DatabaseManager.deleteIfExists();
                 FirstRunSetupDialog setup = new FirstRunSetupDialog();
                 setup.setVisible(true);
                 if (!setup.isSetupCompleted()) {
