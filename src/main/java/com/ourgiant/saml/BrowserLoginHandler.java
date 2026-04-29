@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.time.Duration;
+import java.util.function.Consumer;
 
 /**
  * Handles browser automation for SAML login
@@ -23,9 +24,11 @@ public class BrowserLoginHandler {
     private final boolean showBrowser;
     private final String accountNumber;
     private final String iamRole;
+    private final Consumer<String> statusCallback;
 
     public BrowserLoginHandler(WebDriver driver, boolean useOktaFastPass, PasswordManager passwordManager,
-                                boolean showBrowser, String accountNumber, String iamRole) {
+                                boolean showBrowser, String accountNumber, String iamRole,
+                                Consumer<String> statusCallback) {
         this.driver = driver;
         this.wait = new WebDriverWait(driver, Duration.ofSeconds(30));
         this.useOktaFastPass = useOktaFastPass;
@@ -33,6 +36,7 @@ public class BrowserLoginHandler {
         this.showBrowser = showBrowser;
         this.accountNumber = accountNumber;
         this.iamRole = iamRole;
+        this.statusCallback = statusCallback;
     }
 
     /**
@@ -42,13 +46,12 @@ public class BrowserLoginHandler {
         logger.info("Navigating to login page: {}", loginUrl);
 
         try {
-            // Navigate to login page
+            statusCallback.accept("Navigating to login page: " + loginUrl + "...");
             driver.get(loginUrl);
 
-            // Wait for login page to load
+            statusCallback.accept("Waiting for login page to load...");
             wait.until(ExpectedConditions.titleContains(loginTitle));
 
-            // Handle Okta login (since user specified Okta)
             return handleOktaLogin(username);
 
         } catch (Exception e) {
@@ -64,46 +67,49 @@ public class BrowserLoginHandler {
         logger.info("Handling Okta login for user: {}", username);
 
         // Detect managed-device Okta flow with pre-authenticated MFA screen first
+        statusCallback.accept("Checking for pre-authenticated Okta MFA screen...");
         if (isPreAuthenticatedOktaMfaScreen()) {
             logger.info("Detected pre-authenticated Okta MFA screen; skipping username/password entry");
+            statusCallback.accept("Pre-authenticated MFA screen detected; selecting MFA method...");
             clickOktaSelection();
             return waitForSamlResponse();
         }
 
         // Wait for and fill username field
         try {
+            statusCallback.accept("Entering username: " + username + "...");
             WebElement usernameField = wait.until(ExpectedConditions.elementToBeClickable(By.name("identifier")));
             usernameField.clear();
             usernameField.sendKeys(username);
 
-            // Click next/sign in
-            // <input class="button button-primary" type="submit" value="Next" data-type="save">
             WebElement nextButton = wait.until(ExpectedConditions.elementToBeClickable(By.className("button-primary")));
             nextButton.click();
         } catch (TimeoutException e) {
             logger.info("Okta username field not found; checking for managed-device MFA flow");
+            statusCallback.accept("Username field not found; checking for managed-device MFA flow...");
             if (isPreAuthenticatedOktaMfaScreen()) {
                 logger.info("Detected managed-device Okta MFA flow after missing username field");
+                statusCallback.accept("Managed-device MFA flow detected; selecting MFA method...");
                 clickOktaSelection();
                 return waitForSamlResponse();
             }
             throw e;
         }
-        // Check for interstitial page that may require clicking through before password entry
 
-        logger.info("Checking for intermediate verification page");
+        statusCallback.accept("Checking for intermediate verification page...");
         if (isIntermediateVerifificationPage()) {
             logger.info("Handling intermediate verification page");
+            statusCallback.accept("Intermediate verification page detected; switching to password entry...");
             clickUsePassword();
         }
 
         try {
             WebElement passwordField = wait.until(ExpectedConditions.elementToBeClickable(By.name("credentials.passcode")));
+            statusCallback.accept("Entering password...");
             String password = promptForPassword();
             passwordField.clear();
             passwordField.sendKeys(password);
 
-            // Submit password
             WebElement signInButton = wait.until(ExpectedConditions.elementToBeClickable(By.className("button-primary")));
             signInButton.click();
 
@@ -113,12 +119,13 @@ public class BrowserLoginHandler {
         }
 
         if (useOktaFastPass) {
+            statusCallback.accept("Selecting Okta FastPass...");
             clickOktaFastPassSelection();
         } else {
+            statusCallback.accept("Sending Okta MFA push — check your device for an approval request...");
             clickOktaMfaSelection();
         }
 
-        // Wait for SAML response or AWS sign-in page
         return waitForSamlResponse();
     }
 
@@ -278,8 +285,10 @@ public class BrowserLoginHandler {
     private String waitForSamlResponse() throws Exception {
         logger.info("Waiting for SAML response...");
 
-        // Wait for redirect to AWS sign-in page
+        statusCallback.accept("Waiting for redirect to AWS sign-in page...");
         wait.until(ExpectedConditions.urlContains("signin.aws.amazon.com"));
+
+        statusCallback.accept("Capturing SAML response...");
 
         // Try to find SAML response in form
         String samlResponse = null;
@@ -328,6 +337,7 @@ public class BrowserLoginHandler {
 
     private void selectRoleAndSignIn() {
         logger.info("Selecting role {}:{} on AWS SAML page", accountNumber, iamRole);
+        statusCallback.accept("Selecting AWS role " + iamRole + " on AWS console...");
 
         driver.manage().window().maximize();
 

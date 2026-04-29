@@ -19,6 +19,7 @@ import java.io.File;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.function.Consumer;
 
 /**
  * Handles SAML authentication and AWS credential generation
@@ -39,8 +40,10 @@ public class SamlAuthenticator {
     /**
      * Main method to request credentials for a profile
      */
-    public void requestCredentials(String profileName, boolean useOktaFastPass, boolean showBrowser) throws Exception {
+    public void requestCredentials(String profileName, boolean useOktaFastPass, boolean showBrowser,
+                                   Consumer<String> statusCallback) throws Exception {
         logger.info("Starting credential request for profile: {}", profileName);
+        statusCallback.accept("Loading configuration for profile: " + profileName + "...");
 
         // Get profile configuration
         String samlProvider = configManager.getSamlProvider(profileName);
@@ -68,20 +71,25 @@ public class SamlAuthenticator {
         }
 
         // Perform browser login and get SAML response
-        String samlResponse = performBrowserLogin(loginUrl, loginTitle, username, useOktaFastPass, showBrowser, accountNumber, iamRole);
+        String samlResponse = performBrowserLogin(loginUrl, loginTitle, username, useOktaFastPass, showBrowser,
+                accountNumber, iamRole, statusCallback);
 
         // Parse SAML and get role ARN
+        statusCallback.accept("Parsing SAML response...");
         SamlParser samlParser = new SamlParser();
         var roles = samlParser.parseRolesFromSaml(samlResponse);
 
         // Find the matching role
+        statusCallback.accept("Locating AWS role: " + iamRole + "...");
         String roleArn = findMatchingRole(roles, accountNumber, iamRole);
         String principalArn = "arn:aws:iam::" + accountNumber + ":saml-provider/" + samlProvider.substring(4); // Remove "Fed-" prefix
 
         // Assume role with SAML
+        statusCallback.accept("Assuming role with AWS STS...");
         var awsCredentials = assumeRoleWithSaml(principalArn, roleArn, samlResponse, awsRegion, sessionDuration);
 
         // Save credentials
+        statusCallback.accept("Saving credentials for profile: " + profileName + "...");
         credentialManager.saveCredentials(profileName, awsCredentials);
 
         logger.info("Successfully obtained and saved credentials for profile: {}", profileName);
@@ -92,12 +100,15 @@ public class SamlAuthenticator {
      */
     private String performBrowserLogin(String loginUrl, String loginTitle, String username,
                                         boolean useOktaFastPass, boolean showBrowser,
-                                        String accountNumber, String iamRole) throws Exception {
+                                        String accountNumber, String iamRole,
+                                        Consumer<String> statusCallback) throws Exception {
         logger.info("Starting browser login to: {}", loginUrl);
+        statusCallback.accept("Launching browser...");
 
         WebDriver driver = createWebDriver(showBrowser);
         try {
-            BrowserLoginHandler loginHandler = new BrowserLoginHandler(driver, useOktaFastPass, passwordManager, showBrowser, accountNumber, iamRole);
+            BrowserLoginHandler loginHandler = new BrowserLoginHandler(driver, useOktaFastPass, passwordManager,
+                    showBrowser, accountNumber, iamRole, statusCallback);
             return loginHandler.performLogin(loginUrl, loginTitle, username);
         } catch (Exception e) {
             driver.quit();
