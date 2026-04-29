@@ -475,6 +475,14 @@ public class SwingMain extends JFrame {
                 // Use default look and feel
             }
 
+            if (!ConfigManager.configFileExists()) {
+                FirstRunSetupDialog setup = new FirstRunSetupDialog();
+                setup.setVisible(true);
+                if (!setup.isSetupCompleted()) {
+                    System.exit(0);
+                }
+            }
+
             new SwingMain().setVisible(true);
         });
     }
