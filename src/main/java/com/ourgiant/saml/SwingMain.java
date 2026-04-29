@@ -174,7 +174,7 @@ public class SwingMain extends JFrame {
     private void showAboutDialog() {
         String version = getClass().getPackage() != null ? getClass().getPackage().getImplementationVersion() : null;
         if (version == null) {
-            version = "1.0.7";
+            version = "1.0.8";
         }
 
         JPanel panel = new JPanel();
