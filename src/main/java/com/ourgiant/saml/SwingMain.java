@@ -467,6 +467,8 @@ public class SwingMain extends JFrame {
 
     public static void main(String[] args) {
         System.setProperty("SE_AVOID_STATS", "true");
+        System.setProperty("awt.useSystemAAFontSettings", "on");
+        System.setProperty("swing.aatext", "true");
 
         SwingUtilities.invokeLater(() -> {
             try {
