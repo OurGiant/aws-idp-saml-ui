@@ -176,6 +176,7 @@ public class SwingMain extends JFrame {
         if (version == null) {
             version = "1.0.8";
         }
+        final String currentVersion = version;
 
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -185,7 +186,7 @@ public class SwingMain extends JFrame {
         nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 16f));
         nameLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        JLabel versionLabel = new JLabel("Version " + version);
+        JLabel versionLabel = new JLabel("Version " + currentVersion);
         versionLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JLabel descLabel = new JLabel("AWS SAML authentication client");
@@ -194,6 +195,10 @@ public class SwingMain extends JFrame {
         JLabel copyrightLabel = new JLabel("© OurGiant");
         copyrightLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
+        JLabel updateLabel = new JLabel("Checking for updates...");
+        updateLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        updateLabel.setForeground(Color.GRAY);
+
         panel.add(nameLabel);
         panel.add(Box.createVerticalStrut(8));
         panel.add(versionLabel);
@@ -201,8 +206,109 @@ public class SwingMain extends JFrame {
         panel.add(descLabel);
         panel.add(Box.createVerticalStrut(8));
         panel.add(copyrightLabel);
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(updateLabel);
+
+        SwingWorker<String[], Void> versionChecker = new SwingWorker<>() {
+            @Override
+            protected String[] doInBackground() {
+                return fetchLatestRelease();
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    String[] release = get();
+                    if (release != null) {
+                        String latestTag = release[0];
+                        String releaseUrl = release[1];
+                        String latestVersion = latestTag.startsWith("v") ? latestTag.substring(1) : latestTag;
+                        if (isNewerVersion(latestVersion, currentVersion)) {
+                            updateLabel.setText("<html><a href=''>Version " + latestVersion + " available — click to download</a></html>");
+                            updateLabel.setForeground(new Color(0, 102, 204));
+                            updateLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                            updateLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+                                @Override
+                                public void mouseClicked(java.awt.event.MouseEvent e) {
+                                    try {
+                                        Desktop.getDesktop().browse(new java.net.URI(releaseUrl));
+                                    } catch (Exception ex) {
+                                        logger.warn("Could not open release URL in browser", ex);
+                                    }
+                                }
+                            });
+                        } else {
+                            updateLabel.setText("Up to date");
+                            updateLabel.setForeground(new Color(0, 128, 0));
+                        }
+                    } else {
+                        updateLabel.setText("Could not check for updates");
+                    }
+                } catch (Exception e) {
+                    updateLabel.setText("Could not check for updates");
+                    logger.debug("Version check failed", e);
+                }
+                panel.revalidate();
+                panel.repaint();
+            }
+        };
+        versionChecker.execute();
 
         JOptionPane.showMessageDialog(this, panel, "About AWS IDP SAML UI", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    private String[] fetchLatestRelease() {
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .build();
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("https://api.github.com/repos/OurGiant/aws-idp-saml-ui/releases/latest"))
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "aws-idp-saml-ui")
+                    .timeout(Duration.ofSeconds(10))
+                    .build();
+            java.net.http.HttpResponse<String> response = client.send(request,
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                String body = response.body();
+                String tagName = extractJsonString(body, "tag_name");
+                String htmlUrl = extractJsonString(body, "html_url");
+                if (tagName != null && htmlUrl != null) {
+                    return new String[]{tagName, htmlUrl};
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to fetch latest release from GitHub", e);
+        }
+        return null;
+    }
+
+    private String extractJsonString(String json, String key) {
+        String search = "\"" + key + "\":\"";
+        int start = json.indexOf(search);
+        if (start == -1) return null;
+        start += search.length();
+        int end = json.indexOf("\"", start);
+        if (end == -1) return null;
+        return json.substring(start, end);
+    }
+
+    private boolean isNewerVersion(String latest, String current) {
+        try {
+            String[] latestParts = latest.split("\\.");
+            String[] currentParts = current.split("\\.");
+            int len = Math.max(latestParts.length, currentParts.length);
+            for (int i = 0; i < len; i++) {
+                int l = i < latestParts.length ? Integer.parseInt(latestParts[i]) : 0;
+                int c = i < currentParts.length ? Integer.parseInt(currentParts[i]) : 0;
+                if (l > c) return true;
+                if (l < c) return false;
+            }
+        } catch (NumberFormatException e) {
+            logger.debug("Could not compare versions: {} vs {}", latest, current);
+        }
+        return false;
     }
 
     private void setWindowIcon() {
