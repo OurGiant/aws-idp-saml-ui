@@ -120,6 +120,16 @@ public class SwingMain extends JFrame {
         tokenStatusTable.setFillsViewportHeight(true);
         tokenStatusTable.setRowHeight(26);
         tokenStatusTable.getColumnModel().getColumn(1).setCellRenderer(new StatusTableCellRenderer());
+        tokenStatusTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                int row = tokenStatusTable.rowAtPoint(e.getPoint());
+                if (row >= 0) {
+                    String profile = (String) tokenStatusTableModel.getValueAt(row, 0);
+                    profileComboBox.setSelectedItem(profile);
+                }
+            }
+        });
 
         JScrollPane tableScrollPane = new JScrollPane(tokenStatusTable);
         tokenStatusPanel.add(tableScrollPane, BorderLayout.CENTER);
