@@ -209,19 +209,13 @@ public class ConfigManager {
      * Get session duration for a profile
      */
     public int getSessionDuration(String profileName) {
-        Profile.Section profile = getProfile(profileName);
-        if (profile != null) {
-            String duration = profile.get("sessionduration");
-            if (duration != null) {
-                try {
-                    return Integer.parseInt(duration);
-                } catch (NumberFormatException e) {
-                    logger.warn("Invalid session duration for profile {}: {}", profileName, duration);
-                }
-            }
+        // 1. UI database value takes highest priority
+        int dbDuration = databaseManager.getSessionDuration();
+        if (dbDuration > 0) {
+            return dbDuration;
         }
 
-        // Fall back to global config
+        // 2. Global samlsts config
         Profile.Section global = getGlobalConfig();
         if (global != null) {
             String duration = global.get("sessionduration");
@@ -234,7 +228,20 @@ public class ConfigManager {
             }
         }
 
-        return databaseManager.getSessionDuration(); // Use database default (4 hours)
+        // 3. Profile-specific samlsts config
+        Profile.Section profile = getProfile(profileName);
+        if (profile != null) {
+            String duration = profile.get("sessionduration");
+            if (duration != null) {
+                try {
+                    return Integer.parseInt(duration);
+                } catch (NumberFormatException e) {
+                    logger.warn("Invalid session duration for profile {}: {}", profileName, duration);
+                }
+            }
+        }
+
+        return 14400;
     }
 
     /**
