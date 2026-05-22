@@ -129,7 +129,7 @@ public class BrowserLoginHandler {
         return waitForSamlResponse();
     }
 
-    private boolean isIntermediateVerifificationPage() { 
+    private boolean isIntermediateVerifificationPage() {
         try {
             WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(10));
             shortWait.until(ExpectedConditions.presenceOfElementLocated(By.linkText("Back to sign in")));
@@ -138,13 +138,14 @@ public class BrowserLoginHandler {
             return false;
         }
         logger.info("Detected intermediate verification page");
-        try { 
-            Thread.sleep(2000); // Wait for potential redirect to occur
-            String pageSource = driver.getPageSource();
-            boolean hasVerifyIndicator = pageSource.contains("class=\"button select-factor link-button\"");
+        try {
+            // Wait for the page to stabilise after detecting the intermediate screen
+            WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(3));
+            shortWait.until(ExpectedConditions.presenceOfElementLocated(By.className("select-factor")));
             return true;
-        }
-        catch (Exception e) {
+        } catch (TimeoutException e) {
+            return true; // "Back to sign in" was found; treat as intermediate page regardless
+        } catch (Exception e) {
             logger.warn("Error while checking for intermediate verification page", e);
             return false;
         }
@@ -200,13 +201,14 @@ public class BrowserLoginHandler {
             + " | //input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']"
         );
 
-        // First check if autoChallenge is present is checked, which would indicate we can skip clicking the button
+        // First check if autoChallenge is present and checked, which would indicate we can skip clicking the button
         try {
-            WebElement autoChallengeElement = wait.until(ExpectedConditions.presenceOfElementLocated(By.name("autoChallenge")));
+            WebDriverWait probeWait = new WebDriverWait(driver, Duration.ofSeconds(3));
+            WebElement autoChallengeElement = probeWait.until(ExpectedConditions.presenceOfElementLocated(By.name("autoChallenge")));
             if (autoChallengeElement.isSelected()) {
                 logger.info("Okta auto-challenge is enabled, skipping click");
                 return;
-            } 
+            }
         } catch (NoSuchElementException | TimeoutException e) {
             logger.info("Okta auto-challenge element not found or not enabled, proceeding to click selection");
         }
@@ -220,10 +222,10 @@ public class BrowserLoginHandler {
             throw new RuntimeException("Could not find Okta MFA push selection button on managed-device login screen", e);
         }
 
-        // For some reason, on Windows we end up going from choose to get a push notification to a page that actually sends the notification. This does happen on Linux
-        // To account for this after we push the aria-lable Select button, we need to then push the Send Push with have the class button-primary and type submit
+        // On Windows an extra "Send Push" confirmation page appears after selecting the MFA method; not present on Linux
         try {
-            WebElement sendPushButton = wait.until(ExpectedConditions.elementToBeClickable(By.xpath("//input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']")));
+            WebDriverWait probeWait = new WebDriverWait(driver, Duration.ofSeconds(5));
+            WebElement sendPushButton = probeWait.until(ExpectedConditions.elementToBeClickable(By.xpath("//input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']")));
             sendPushButton.click();
         } catch (TimeoutException e) {
             logger.info("Send Push button not found after clicking Okta Verify selection, which may be expected on some platforms");
