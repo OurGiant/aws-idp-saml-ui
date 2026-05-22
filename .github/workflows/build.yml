@@ -57,5 +57,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ github.ref_name }}
-          files: AWS-IDP-SAML-${{ steps.version.outputs.version }}.zip
+          files: |
+            AWS-IDP-SAML-${{ steps.version.outputs.version }}.zip
+            target/aws-idp-saml-ui-all.jar
           generate_release_notes: true
