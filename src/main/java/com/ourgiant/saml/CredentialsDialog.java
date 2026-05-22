@@ -174,19 +174,21 @@ public class CredentialsDialog extends JDialog {
             java.security.SecureRandom random = new java.security.SecureRandom();
             byte[] aesKey = new byte[32]; // 256-bit
             random.nextBytes(aesKey);
-            byte[] iv = new byte[12]; // 96-bit for GCM
+            byte[] iv = new byte[16]; // 128-bit for CBC
             random.nextBytes(iv);
 
-            // Encrypt credentials with AES-GCM
-            javax.crypto.Cipher aesCipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+            // Encrypt credentials with AES-CBC (matches Python's modes.CBC)
+            javax.crypto.Cipher aesCipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding");
             javax.crypto.spec.SecretKeySpec secretKeySpec = new javax.crypto.spec.SecretKeySpec(aesKey, "AES");
-            javax.crypto.spec.GCMParameterSpec gcmSpec = new javax.crypto.spec.GCMParameterSpec(128, iv); // 128-bit tag
-            aesCipher.init(javax.crypto.Cipher.ENCRYPT_MODE, secretKeySpec, gcmSpec);
+            aesCipher.init(javax.crypto.Cipher.ENCRYPT_MODE, secretKeySpec, new javax.crypto.spec.IvParameterSpec(iv));
             byte[] encryptedCredentials = aesCipher.doFinal(credentialsString.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
-            // Encrypt AES key with RSA
-            javax.crypto.Cipher rsaCipher = javax.crypto.Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
-            rsaCipher.init(javax.crypto.Cipher.ENCRYPT_MODE, publicKey);
+            // Encrypt AES key with RSA-OAEP, MGF1 with SHA-256 on both sides (matches Python explicitly)
+            javax.crypto.Cipher rsaCipher = javax.crypto.Cipher.getInstance("RSA/ECB/OAEPPadding");
+            javax.crypto.spec.OAEPParameterSpec oaepSpec = new javax.crypto.spec.OAEPParameterSpec(
+                "SHA-256", "MGF1", java.security.spec.MGF1ParameterSpec.SHA256,
+                javax.crypto.spec.PSource.PSpecified.DEFAULT);
+            rsaCipher.init(javax.crypto.Cipher.ENCRYPT_MODE, publicKey, oaepSpec);
             byte[] encryptedAesKey = rsaCipher.doFinal(aesKey);
 
             // Combine: encrypted_aes_key:iv:encrypted_credentials (all hex encoded)
