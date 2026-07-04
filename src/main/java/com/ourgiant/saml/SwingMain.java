@@ -14,8 +14,11 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -182,11 +185,7 @@ public class SwingMain extends JFrame {
     }
 
     private void showAboutDialog() {
-        String version = getClass().getPackage() != null ? getClass().getPackage().getImplementationVersion() : null;
-        if (version == null) {
-            version = "1.0.8";
-        }
-        final String currentVersion = version;
+        final String currentVersion = resolveCurrentVersion();
 
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -265,6 +264,27 @@ public class SwingMain extends JFrame {
         versionChecker.execute();
 
         JOptionPane.showMessageDialog(this, panel, "About AWS IDP SAML UI", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    private String resolveCurrentVersion() {
+        String version = getClass().getPackage() != null ? getClass().getPackage().getImplementationVersion() : null;
+        if (version == null) {
+            version = readVersionFromPropertiesResource();
+        }
+        return version != null ? version : "unknown";
+    }
+
+    private String readVersionFromPropertiesResource() {
+        try (InputStream in = getClass().getResourceAsStream("/version.properties")) {
+            if (in != null) {
+                Properties props = new Properties();
+                props.load(in);
+                return props.getProperty("version");
+            }
+        } catch (IOException e) {
+            logger.debug("Could not read version.properties", e);
+        }
+        return null;
     }
 
     private String[] fetchLatestRelease() {
