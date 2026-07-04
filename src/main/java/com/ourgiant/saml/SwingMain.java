@@ -314,7 +314,7 @@ public class SwingMain extends JFrame {
         return null;
     }
 
-    private String extractJsonString(String json, String key) {
+    static String extractJsonString(String json, String key) {
         String search = "\"" + key + "\":\"";
         int start = json.indexOf(search);
         if (start == -1) return null;
@@ -324,7 +324,7 @@ public class SwingMain extends JFrame {
         return json.substring(start, end);
     }
 
-    private boolean isNewerVersion(String latest, String current) {
+    static boolean isNewerVersion(String latest, String current) {
         try {
             String[] latestParts = latest.split("\\.");
             String[] currentParts = current.split("\\.");
