@@ -36,6 +36,7 @@ public class DatabaseManager {
 
             connection = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
             createTables();
+            FilePermissions.restrictToOwner(new File(dbPath).toPath());
             logger.info("Database initialized at: {}", dbPath);
         } catch (SQLException e) {
             logger.error("Failed to initialize database", e);
