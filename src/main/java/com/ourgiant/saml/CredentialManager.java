@@ -183,6 +183,7 @@ public class CredentialManager {
             }
 
             credentials.store(credFile);
+            FilePermissions.restrictToOwner(credFile.toPath());
             logger.info("Credentials saved for profile: {}", profileName);
         } catch (Exception e) {
             logger.error("Failed to save credentials for profile: {}", profileName, e);
