@@ -259,13 +259,21 @@ public class ConfigManager {
     }
 
     /**
-     * Get browser type from global config
+     * Get browser type to use for SAML login
      */
     public String getBrowserType() {
+        // 1. UI database value takes highest priority, if the user has explicitly set one
+        String dbBrowser = databaseManager.getConfig("browser");
+        if (dbBrowser != null && !dbBrowser.isEmpty()) {
+            return dbBrowser;
+        }
+
+        // 2. Global samlsts config, set during first-run setup
         Profile.Section global = getGlobalConfig();
         if (global != null) {
             return global.get("browser", "chrome");
         }
+
         return "chrome";
     }
 

@@ -163,6 +163,18 @@ public class DatabaseManager {
         setConfig("use_fastpass", String.valueOf(enabled));
     }
 
+    // Intentionally not seeded in insertDefaultConfig(): an absent value lets
+    // ConfigManager.getBrowserType() fall back to the samlsts "browser" key
+    // (set during first-run setup) until the user explicitly saves a choice here.
+    public String getBrowser() {
+        String value = getConfig("browser");
+        return value != null ? value : "chrome"; // Default Chrome
+    }
+
+    public void setBrowser(String browser) {
+        setConfig("browser", browser);
+    }
+
     // Token state methods
     public void updateExpiration(String profileName, Instant expiration) {
         if (profileName == null || expiration == null) {
