@@ -14,6 +14,9 @@ import java.awt.event.ActionListener;
 public class ConfigurationDialog extends JDialog {
     private static final Logger logger = LoggerFactory.getLogger(ConfigurationDialog.class);
 
+    private static final String[] BROWSERS = {"chrome", "firefox"};
+
+    private final ConfigManager configManager;
     private final DatabaseManager databaseManager;
     private final PasswordManager passwordManager;
     private JSpinner durationSpinner;
@@ -21,12 +24,14 @@ public class ConfigurationDialog extends JDialog {
     private JButton forgetPasswordButton;
     private JSpinner passwordExpirationSpinner;
     private JComboBox<String> themeComboBox;
+    private JComboBox<String> browserComboBox;
     private JCheckBox useFastPassCheckBox;
     private JButton saveButton;
     private JButton cancelButton;
 
-    public ConfigurationDialog(Frame parent, DatabaseManager databaseManager, PasswordManager passwordManager) {
+    public ConfigurationDialog(Frame parent, ConfigManager configManager, DatabaseManager databaseManager, PasswordManager passwordManager) {
         super(parent, "Configuration", true);
+        this.configManager = configManager;
         this.databaseManager = databaseManager;
         this.passwordManager = passwordManager;
 
@@ -51,7 +56,8 @@ public class ConfigurationDialog extends JDialog {
         outerGbc.gridy = 0; outerPanel.add(buildSessionSection(), outerGbc);
         outerGbc.gridy = 1; outerPanel.add(buildPasswordSection(), outerGbc);
         outerGbc.gridy = 2; outerPanel.add(buildAppearanceSection(), outerGbc);
-        outerGbc.gridy = 3; outerPanel.add(buildAuthSection(), outerGbc);
+        outerGbc.gridy = 3; outerPanel.add(buildBrowserSection(), outerGbc);
+        outerGbc.gridy = 4; outerPanel.add(buildAuthSection(), outerGbc);
 
         add(outerPanel, BorderLayout.CENTER);
 
@@ -131,6 +137,20 @@ public class ConfigurationDialog extends JDialog {
         return panel;
     }
 
+    private JPanel buildBrowserSection() {
+        JPanel panel = titledPanel("Browser");
+        GridBagConstraints gbc = sectionGbc();
+
+        gbc.gridx = 0; gbc.gridy = 0;
+        panel.add(new JLabel("Browser:"), gbc);
+
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        browserComboBox = new JComboBox<>(BROWSERS);
+        panel.add(browserComboBox, gbc);
+
+        return panel;
+    }
+
     private JPanel buildAuthSection() {
         JPanel panel = titledPanel("Authentication");
         GridBagConstraints gbc = sectionGbc();
@@ -191,6 +211,8 @@ public class ConfigurationDialog extends JDialog {
 
         themeComboBox.setSelectedItem(databaseManager.getTheme());
 
+        browserComboBox.setSelectedItem(configManager.getBrowserType());
+
         useFastPassCheckBox.setSelected(databaseManager.getFastPassEnabled());
 
         updatePasswordExpirationEnabled();
@@ -213,11 +235,14 @@ public class ConfigurationDialog extends JDialog {
                 String selectedTheme = (String) themeComboBox.getSelectedItem();
                 databaseManager.setTheme(selectedTheme);
 
+                String selectedBrowser = (String) browserComboBox.getSelectedItem();
+                databaseManager.setBrowser(selectedBrowser);
+
                 boolean useFastPass = useFastPassCheckBox.isSelected();
                 databaseManager.setFastPassEnabled(useFastPass);
 
-                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, use_fastpass = {}",
-                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, useFastPass);
+                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}",
+                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass);
 
                 // Apply theme immediately
                 if (ThemeManager.applyTheme(selectedTheme)) {

@@ -542,7 +542,7 @@ public class SwingMain extends JFrame {
     }
 
     private void showConfigurationDialog() {
-        ConfigurationDialog dialog = new ConfigurationDialog(this, databaseManager, passwordManager);
+        ConfigurationDialog dialog = new ConfigurationDialog(this, configManager, databaseManager, passwordManager);
         dialog.setVisible(true);
     }
 
