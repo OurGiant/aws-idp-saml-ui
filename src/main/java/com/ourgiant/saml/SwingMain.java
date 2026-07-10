@@ -38,7 +38,9 @@ public class SwingMain extends JFrame {
     private JTable tokenStatusTable;
     private JLabel lastRefreshedLabel;
     private JLabel statusLabel;
+    private JProgressBar loginProgressBar;
     private Timer statusRefreshTimer;
+    private volatile boolean credentialRequestInProgress = false;
 
     private ConfigManager configManager;
     private CredentialManager credentialManager;
@@ -154,6 +156,11 @@ public class SwingMain extends JFrame {
         statusPanel.setBorder(BorderFactory.createLoweredBevelBorder());
         statusLabel = new JLabel("Ready");
         statusPanel.add(statusLabel);
+        loginProgressBar = new JProgressBar();
+        loginProgressBar.setPreferredSize(new Dimension(120, 16));
+        loginProgressBar.setIndeterminate(true);
+        loginProgressBar.setVisible(false);
+        statusPanel.add(loginProgressBar);
         add(statusPanel, BorderLayout.SOUTH);
 
         pack();
@@ -404,9 +411,13 @@ public class SwingMain extends JFrame {
             }
 
             lastRefreshedLabel.setText("Last refreshed: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-            statusLabel.setText("Status refreshed.");
+            if (!credentialRequestInProgress) {
+                statusLabel.setText("Status refreshed.");
+            }
         } catch (Exception e) {
-            statusLabel.setText("Failed to update status table: " + e.getMessage());
+            if (!credentialRequestInProgress) {
+                statusLabel.setText("Failed to update status table: " + e.getMessage());
+            }
             System.err.println("Status table update failed: " + e.getMessage());
             e.printStackTrace();
         }
@@ -482,6 +493,8 @@ public class SwingMain extends JFrame {
             // Disable button during processing
             requestCredentialsButton.setEnabled(false);
             requestCredentialsButton.setText("Requesting...");
+            credentialRequestInProgress = true;
+            loginProgressBar.setVisible(true);
             statusLabel.setText("Starting credential request for profile: " + selectedProfile + "...");
 
             // Run credential request in background thread
@@ -502,16 +515,20 @@ public class SwingMain extends JFrame {
                 protected void done() {
                     requestCredentialsButton.setEnabled(true);
                     requestCredentialsButton.setText("Request Credentials");
+                    credentialRequestInProgress = false;
+                    loginProgressBar.setVisible(false);
 
                     try {
                         get(); // Check for exceptions
                         refreshStatusTable();
                         updateCredentialButtons();
+                        statusLabel.setText("Credentials successfully obtained for profile: " + selectedProfile);
                         JOptionPane.showMessageDialog(SwingMain.this,
                             "Credentials successfully obtained for profile: " + selectedProfile,
                             "Success",
                             JOptionPane.INFORMATION_MESSAGE);
                     } catch (Exception ex) {
+                        statusLabel.setText("Error obtaining credentials: " + ex.getMessage());
                         JOptionPane.showMessageDialog(SwingMain.this,
                             "Error obtaining credentials: " + ex.getMessage(),
                             "Authentication Error",
