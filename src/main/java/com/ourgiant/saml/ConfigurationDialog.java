@@ -27,6 +27,7 @@ public class ConfigurationDialog extends JDialog {
     private JComboBox<String> themeComboBox;
     private JComboBox<String> browserComboBox;
     private JCheckBox useFastPassCheckBox;
+    private JCheckBox trayNotificationsCheckBox;
     private JButton saveButton;
     private JButton cancelButton;
 
@@ -59,6 +60,7 @@ public class ConfigurationDialog extends JDialog {
         outerGbc.gridy = 2; outerPanel.add(buildAppearanceSection(), outerGbc);
         outerGbc.gridy = 3; outerPanel.add(buildBrowserSection(), outerGbc);
         outerGbc.gridy = 4; outerPanel.add(buildAuthSection(), outerGbc);
+        outerGbc.gridy = 5; outerPanel.add(buildNotificationsSection(), outerGbc);
 
         add(outerPanel, BorderLayout.CENTER);
 
@@ -175,6 +177,23 @@ public class ConfigurationDialog extends JDialog {
         return panel;
     }
 
+    private JPanel buildNotificationsSection() {
+        JPanel panel = titledPanel("Notifications");
+        GridBagConstraints gbc = sectionGbc();
+
+        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
+        trayNotificationsCheckBox = new JCheckBox("Show tray notification before credentials expire");
+        trayNotificationsCheckBox.setMnemonic(KeyEvent.VK_Y);
+        boolean traySupported = SystemTray.isSupported();
+        trayNotificationsCheckBox.setEnabled(traySupported);
+        trayNotificationsCheckBox.setToolTipText(traySupported
+            ? "Show a system tray notification a few minutes before a profile's AWS credentials expire"
+            : "System tray is not available on this platform/environment");
+        panel.add(trayNotificationsCheckBox, gbc);
+
+        return panel;
+    }
+
     private static JPanel titledPanel(String title) {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createTitledBorder(title));
@@ -228,6 +247,8 @@ public class ConfigurationDialog extends JDialog {
 
         useFastPassCheckBox.setSelected(databaseManager.getFastPassEnabled());
 
+        trayNotificationsCheckBox.setSelected(databaseManager.getTrayNotificationsEnabled());
+
         updatePasswordExpirationEnabled();
     }
 
@@ -254,8 +275,11 @@ public class ConfigurationDialog extends JDialog {
                 boolean useFastPass = useFastPassCheckBox.isSelected();
                 databaseManager.setFastPassEnabled(useFastPass);
 
-                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}",
-                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass);
+                boolean trayNotificationsEnabled = trayNotificationsCheckBox.isSelected();
+                databaseManager.setTrayNotificationsEnabled(trayNotificationsEnabled);
+
+                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}, tray_notifications = {}",
+                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass, trayNotificationsEnabled);
 
                 // Apply theme immediately
                 if (ThemeManager.applyTheme(selectedTheme)) {
