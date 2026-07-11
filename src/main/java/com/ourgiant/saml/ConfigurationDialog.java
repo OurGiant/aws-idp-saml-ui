@@ -7,6 +7,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 
 /**
  * Configuration dialog for setting application options.
@@ -63,7 +64,9 @@ public class ConfigurationDialog extends JDialog {
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         saveButton = new JButton("Save");
+        saveButton.setMnemonic(KeyEvent.VK_S);
         cancelButton = new JButton("Cancel");
+        cancelButton.setMnemonic(KeyEvent.VK_C);
         saveButton.addActionListener(new SaveActionListener());
         cancelButton.addActionListener(e -> setVisible(false));
         buttonPanel.add(cancelButton);
@@ -85,6 +88,7 @@ public class ConfigurationDialog extends JDialog {
             databaseManager.getMaxDuration() / 60,
             15
         ));
+        durationSpinner.setToolTipText("How long requested AWS credentials remain valid before they expire");
         panel.add(durationSpinner, gbc);
 
         return panel;
@@ -96,7 +100,9 @@ public class ConfigurationDialog extends JDialog {
 
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
         storePasswordCheckBox = new JCheckBox("Store and use Okta password");
+        storePasswordCheckBox.setMnemonic(KeyEvent.VK_T);
         storePasswordCheckBox.addActionListener(e -> updatePasswordExpirationEnabled());
+        storePasswordCheckBox.setToolTipText("Securely cache your Okta password locally so you're not prompted for it every login");
         panel.add(storePasswordCheckBox, gbc);
         gbc.gridwidth = 1;
 
@@ -108,13 +114,16 @@ public class ConfigurationDialog extends JDialog {
             databaseManager.getPasswordExpirationMinutes(), 15, 10080, 60
         ));
         passwordExpirationSpinner.setEnabled(false);
+        passwordExpirationSpinner.setToolTipText("How long the stored password stays cached before you must re-enter it");
         panel.add(passwordExpirationSpinner, gbc);
         gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
 
         gbc.gridx = 1; gbc.gridy = 2; gbc.anchor = GridBagConstraints.EAST;
         forgetPasswordButton = new JButton("Forget Password");
+        forgetPasswordButton.setMnemonic(KeyEvent.VK_G);
         forgetPasswordButton.setEnabled(false);
         forgetPasswordButton.addActionListener(e -> forgetStoredPassword());
+        forgetPasswordButton.setToolTipText("Clear the securely stored password immediately");
         panel.add(forgetPasswordButton, gbc);
 
         return panel;
@@ -132,6 +141,7 @@ public class ConfigurationDialog extends JDialog {
         for (String theme : ThemeManager.getAvailableThemeNames()) {
             themeComboBox.addItem(theme);
         }
+        themeComboBox.setToolTipText("Application color theme");
         panel.add(themeComboBox, gbc);
 
         return panel;
@@ -146,6 +156,7 @@ public class ConfigurationDialog extends JDialog {
 
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         browserComboBox = new JComboBox<>(BROWSERS);
+        browserComboBox.setToolTipText("Browser used to drive the SAML login flow");
         panel.add(browserComboBox, gbc);
 
         return panel;
@@ -157,6 +168,8 @@ public class ConfigurationDialog extends JDialog {
 
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
         useFastPassCheckBox = new JCheckBox("Use Okta FastPass");
+        useFastPassCheckBox.setMnemonic(KeyEvent.VK_U);
+        useFastPassCheckBox.setToolTipText("Attempt Okta FastPass (device-based) login before falling back to password entry");
         panel.add(useFastPassCheckBox, gbc);
 
         return panel;

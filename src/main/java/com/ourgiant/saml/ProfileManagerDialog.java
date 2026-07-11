@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 
 /**
  * Dialog for listing, adding, editing, and deleting AWS profiles in ~/.aws/samlsts.
@@ -40,14 +41,21 @@ public class ProfileManagerDialog extends JDialog {
         ((JComponent) getContentPane()).setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         profileList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        profileList.setToolTipText("Configured AWS profiles");
         add(new JScrollPane(profileList), BorderLayout.CENTER);
 
         JPanel sideButtonPanel = new JPanel();
         sideButtonPanel.setLayout(new BoxLayout(sideButtonPanel, BoxLayout.Y_AXIS));
 
         JButton addButton = new JButton("Add...");
+        addButton.setMnemonic(KeyEvent.VK_A);
+        addButton.setToolTipText("Add a new AWS profile");
         JButton editButton = new JButton("Edit...");
+        editButton.setMnemonic(KeyEvent.VK_E);
+        editButton.setToolTipText("Edit the selected profile");
         JButton deleteButton = new JButton("Delete");
+        deleteButton.setMnemonic(KeyEvent.VK_D);
+        deleteButton.setToolTipText("Delete the selected profile");
         addButton.addActionListener(e -> onAdd());
         editButton.addActionListener(e -> onEdit());
         deleteButton.addActionListener(e -> onDelete());
@@ -64,6 +72,7 @@ public class ProfileManagerDialog extends JDialog {
 
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton closeButton = new JButton("Close");
+        closeButton.setMnemonic(KeyEvent.VK_L);
         closeButton.addActionListener(e -> setVisible(false));
         bottomPanel.add(closeButton);
         add(bottomPanel, BorderLayout.SOUTH);

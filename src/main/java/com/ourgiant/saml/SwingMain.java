@@ -9,6 +9,8 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -84,28 +86,39 @@ public class SwingMain extends JFrame {
 
         // Profile selection panel
         JPanel profilePanel = new JPanel(new FlowLayout());
-        profilePanel.add(new JLabel("Select Profile:"));
+        JLabel selectProfileLabel = new JLabel("Select Profile:");
+        profilePanel.add(selectProfileLabel);
         profileComboBox = new JComboBox<>();
         profileComboBox.setPreferredSize(new Dimension(220, 25));
         profileComboBox.addActionListener(e -> updateCredentialButtons());
+        profileComboBox.setToolTipText("The AWS profile to authenticate and fetch credentials for");
+        selectProfileLabel.setLabelFor(profileComboBox);
         profilePanel.add(profileComboBox);
 
         requestCredentialsButton = new JButton("Request Credentials");
+        requestCredentialsButton.setMnemonic(KeyEvent.VK_R);
         requestCredentialsButton.addActionListener(new RequestCredentialsListener());
+        requestCredentialsButton.setToolTipText("Launch browser login and fetch AWS credentials for the selected profile");
         profilePanel.add(requestCredentialsButton);
 
         showBrowserCheckBox = new JCheckBox("Show browser");
+        showBrowserCheckBox.setMnemonic(KeyEvent.VK_B);
         showBrowserCheckBox.setSelected(false);
+        showBrowserCheckBox.setToolTipText("Show the browser window during login instead of running it headless");
         profilePanel.add(showBrowserCheckBox);
 
         showEncryptedButton = new JButton("Encrypted");
+        showEncryptedButton.setMnemonic(KeyEvent.VK_N);
         showEncryptedButton.addActionListener(e -> showCredentialsDialog(true, false));
         showEncryptedButton.setEnabled(false); // Initially disabled until credentials are available
+        showEncryptedButton.setToolTipText("View encrypted credentials for use with deployment tools");
         profilePanel.add(showEncryptedButton);
 
         showCredentialsButton = new JButton("Show Credentials");
+        showCredentialsButton.setMnemonic(KeyEvent.VK_C);
         showCredentialsButton.addActionListener(e -> showCredentialsDialog(false, true));
         showCredentialsButton.setEnabled(false); // Initially disabled until credentials are available
+        showCredentialsButton.setToolTipText("View plaintext AWS credentials for the selected profile");
         profilePanel.add(showCredentialsButton);
 
         add(profilePanel, BorderLayout.NORTH);
@@ -124,6 +137,7 @@ public class SwingMain extends JFrame {
         tokenStatusTable = new JTable(tokenStatusTableModel);
         tokenStatusTable.setFillsViewportHeight(true);
         tokenStatusTable.setRowHeight(26);
+        tokenStatusTable.setToolTipText("Click a row to select that profile above");
         tokenStatusTable.getColumnModel().getColumn(1).setCellRenderer(new StatusTableCellRenderer());
         tokenStatusTable.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
@@ -141,7 +155,9 @@ public class SwingMain extends JFrame {
 
         JPanel statusControls = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton refreshStatusButton = new JButton("Refresh Status");
+        refreshStatusButton.setMnemonic(KeyEvent.VK_U);
         refreshStatusButton.addActionListener(e -> refreshStatusTable());
+        refreshStatusButton.setToolTipText("Recheck credential expiration status for all profiles");
         statusControls.add(refreshStatusButton);
         lastRefreshedLabel = new JLabel();
         statusControls.add(lastRefreshedLabel);
@@ -170,24 +186,32 @@ public class SwingMain extends JFrame {
     private JMenuBar createMenuBar() {
         JMenuBar menuBar = new JMenuBar();
         JMenu fileMenu = new JMenu("File");
+        fileMenu.setMnemonic(KeyEvent.VK_F);
 
         JMenuItem manageProfilesMenuItem = new JMenuItem("Manage Profiles...");
+        manageProfilesMenuItem.setMnemonic(KeyEvent.VK_M);
+        manageProfilesMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_P, InputEvent.CTRL_DOWN_MASK));
         manageProfilesMenuItem.addActionListener(e -> showProfileManagerDialog());
         fileMenu.add(manageProfilesMenuItem);
 
         JMenuItem configMenuItem = new JMenuItem("Configuration...");
+        configMenuItem.setMnemonic(KeyEvent.VK_C);
+        configMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_COMMA, InputEvent.CTRL_DOWN_MASK));
         configMenuItem.addActionListener(e -> showConfigurationDialog());
         fileMenu.add(configMenuItem);
 
         fileMenu.addSeparator();
 
         JMenuItem aboutMenuItem = new JMenuItem("About...");
+        aboutMenuItem.setMnemonic(KeyEvent.VK_A);
         aboutMenuItem.addActionListener(e -> showAboutDialog());
         fileMenu.add(aboutMenuItem);
 
         fileMenu.addSeparator();
 
         JMenuItem exitMenuItem = new JMenuItem("Exit");
+        exitMenuItem.setMnemonic(KeyEvent.VK_X);
+        exitMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Q, InputEvent.CTRL_DOWN_MASK));
         exitMenuItem.addActionListener(e -> System.exit(0));
         fileMenu.add(exitMenuItem);
 
