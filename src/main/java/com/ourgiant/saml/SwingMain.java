@@ -11,6 +11,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -19,7 +21,9 @@ import java.time.format.DateTimeFormatter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
@@ -29,6 +33,7 @@ import java.util.TreeSet;
  */
 public class SwingMain extends JFrame {
     private static final Logger logger = LoggerFactory.getLogger(SwingMain.class);
+    private static final Duration EXPIRY_WARNING_THRESHOLD = Duration.ofMinutes(5);
 
     private JComboBox<String> profileComboBox;
     private JCheckBox showBrowserCheckBox;
@@ -43,6 +48,9 @@ public class SwingMain extends JFrame {
     private JProgressBar loginProgressBar;
     private Timer statusRefreshTimer;
     private volatile boolean credentialRequestInProgress = false;
+
+    private TrayIcon trayIcon;
+    private final Map<String, Instant> lastNotifiedExpiration = new HashMap<>();
 
     private ConfigManager configManager;
     private CredentialManager credentialManager;
@@ -83,6 +91,7 @@ public class SwingMain extends JFrame {
 
         setWindowIcon();
         setJMenuBar(createMenuBar());
+        initializeSystemTray();
 
         // Profile selection panel
         JPanel profilePanel = new JPanel(new FlowLayout());
@@ -212,7 +221,7 @@ public class SwingMain extends JFrame {
         JMenuItem exitMenuItem = new JMenuItem("Exit");
         exitMenuItem.setMnemonic(KeyEvent.VK_X);
         exitMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Q, InputEvent.CTRL_DOWN_MASK));
-        exitMenuItem.addActionListener(e -> System.exit(0));
+        exitMenuItem.addActionListener(e -> exitApplication());
         fileMenu.add(exitMenuItem);
 
         menuBar.add(fileMenu);
@@ -387,10 +396,91 @@ public class SwingMain extends JFrame {
         }
     }
 
+    /**
+     * Sets up a system tray icon (supported on Windows, macOS, and most Linux desktop
+     * environments) so the app can keep monitoring credential expiration in the background
+     * after the window is closed. Falls back to normal exit-on-close if the tray, or icon
+     * loading, isn't available on this platform/environment.
+     */
+    private void initializeSystemTray() {
+        if (!SystemTray.isSupported()) {
+            logger.info("System tray is not supported on this platform; window close will exit the app.");
+            return;
+        }
+
+        try {
+            Image trayImage = Toolkit.getDefaultToolkit().getImage(getClass().getResource("/saml_swing_icon_small.png"));
+
+            PopupMenu trayMenu = new PopupMenu();
+            MenuItem showItem = new MenuItem("Show");
+            showItem.addActionListener(e -> restoreFromTray());
+            MenuItem exitItem = new MenuItem("Exit");
+            exitItem.addActionListener(e -> exitApplication());
+            trayMenu.add(showItem);
+            trayMenu.addSeparator();
+            trayMenu.add(exitItem);
+
+            trayIcon = new TrayIcon(trayImage, "AWS IDP SAML Client", trayMenu);
+            trayIcon.setImageAutoSize(true);
+            trayIcon.addActionListener(e -> restoreFromTray());
+            SystemTray.getSystemTray().add(trayIcon);
+
+            setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+            addWindowListener(new WindowAdapter() {
+                @Override
+                public void windowClosing(WindowEvent e) {
+                    setVisible(false);
+                }
+            });
+        } catch (Exception e) {
+            logger.warn("Failed to initialize system tray icon; window close will exit the app.", e);
+            trayIcon = null;
+        }
+    }
+
+    private void restoreFromTray() {
+        setVisible(true);
+        setExtendedState(JFrame.NORMAL);
+        toFront();
+        requestFocus();
+    }
+
+    private void exitApplication() {
+        if (trayIcon != null) {
+            SystemTray.getSystemTray().remove(trayIcon);
+        }
+        System.exit(0);
+    }
+
     private void startStatusPolling() {
         statusRefreshTimer = new Timer(30000, e -> refreshStatusTable());
         statusRefreshTimer.setRepeats(true);
         statusRefreshTimer.start();
+    }
+
+    /**
+     * Fires a tray notification the first time a profile's credentials cross into the
+     * expiry warning window, so the user doesn't have to keep the window open and watch
+     * the status table. Keyed by the exact expiration instant so a renewed credential
+     * (new expiration) can trigger a fresh notification later.
+     */
+    private void maybeNotifyExpiringSoon(String profile, Instant expiration, Duration remaining) {
+        if (trayIcon == null || !databaseManager.getTrayNotificationsEnabled()) {
+            return;
+        }
+        if (remaining.compareTo(EXPIRY_WARNING_THRESHOLD) > 0) {
+            return;
+        }
+        if (expiration.equals(lastNotifiedExpiration.get(profile))) {
+            return;
+        }
+
+        lastNotifiedExpiration.put(profile, expiration);
+        trayIcon.displayMessage(
+            "AWS credentials expiring soon",
+            "Profile \"" + profile + "\" expires in " + formatDuration(remaining) + ".",
+            TrayIcon.MessageType.WARNING
+        );
     }
 
     private void refreshStatusTable() {
@@ -417,7 +507,9 @@ public class SwingMain extends JFrame {
                 } else if (expiration.isAfter(now)) {
                     status = "VALID";
                     expiresAtText = formatInstant(expiration);
-                    timeRemaining = formatDuration(Duration.between(now, expiration));
+                    Duration remaining = Duration.between(now, expiration);
+                    timeRemaining = formatDuration(remaining);
+                    maybeNotifyExpiringSoon(profile, expiration, remaining);
                 } else {
                     status = "EXPIRED";
                     expiresAtText = formatInstant(expiration);
