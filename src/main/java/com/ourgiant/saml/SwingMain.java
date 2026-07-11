@@ -40,6 +40,7 @@ public class SwingMain extends JFrame {
     private JButton requestCredentialsButton;
     private JButton showEncryptedButton;
     private JButton showCredentialsButton;
+    private JButton openConsoleButton;
 
     private DefaultTableModel tokenStatusTableModel;
     private JTable tokenStatusTable;
@@ -129,6 +130,13 @@ public class SwingMain extends JFrame {
         showCredentialsButton.setEnabled(false); // Initially disabled until credentials are available
         showCredentialsButton.setToolTipText("View plaintext AWS credentials for the selected profile");
         profilePanel.add(showCredentialsButton);
+
+        openConsoleButton = new JButton("Open Console");
+        openConsoleButton.setMnemonic(KeyEvent.VK_O);
+        openConsoleButton.addActionListener(e -> openAwsConsole());
+        openConsoleButton.setEnabled(false); // Initially disabled until credentials are available
+        openConsoleButton.setToolTipText("Open the AWS Management Console in your browser using the selected profile's credentials");
+        profilePanel.add(openConsoleButton);
 
         add(profilePanel, BorderLayout.NORTH);
 
@@ -726,6 +734,58 @@ public class SwingMain extends JFrame {
 
         showEncryptedButton.setEnabled(hasCredentials && hasPublicKey);
         showCredentialsButton.setEnabled(hasCredentials);
+        openConsoleButton.setEnabled(hasCredentials);
+    }
+
+    private void openAwsConsole() {
+        String selectedProfile = (String) profileComboBox.getSelectedItem();
+        if (selectedProfile == null) {
+            JOptionPane.showMessageDialog(this,
+                "Please select a profile first.",
+                "No Profile Selected",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        CredentialManager.AwsCredentials credentials = credentialManager.getCredentials(selectedProfile);
+        if (credentials == null) {
+            JOptionPane.showMessageDialog(this,
+                "No credentials found for profile: " + selectedProfile,
+                "No Credentials",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        openConsoleButton.setEnabled(false);
+        openConsoleButton.setText("Opening...");
+        statusLabel.setText("Opening AWS Console for profile: " + selectedProfile + "...");
+
+        SwingWorker<String, Void> worker = new SwingWorker<>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return AwsConsoleLauncher.buildLoginUrl(credentials);
+            }
+
+            @Override
+            protected void done() {
+                openConsoleButton.setEnabled(true);
+                openConsoleButton.setText("Open Console");
+
+                try {
+                    String loginUrl = get();
+                    Desktop.getDesktop().browse(new java.net.URI(loginUrl));
+                    statusLabel.setText("Opened AWS Console for profile: " + selectedProfile);
+                } catch (Exception ex) {
+                    statusLabel.setText("Failed to open AWS Console: " + ex.getMessage());
+                    logger.error("Failed to open AWS Console for profile: {}", selectedProfile, ex);
+                    JOptionPane.showMessageDialog(SwingMain.this,
+                        "Failed to open AWS Console: " + ex.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        };
+        worker.execute();
     }
 
     private static class TokenStatusRow {
