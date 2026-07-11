@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -53,34 +54,42 @@ public class ProfileEditDialog extends JDialog {
         gbc.anchor = GridBagConstraints.WEST;
 
         gbc.gridx = 0; gbc.gridy = 0;
-        panel.add(new JLabel("Profile Name:"), gbc);
+        JLabel profileNameLabel = new JLabel("Profile Name:");
+        panel.add(profileNameLabel, gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         profileNameField = new JTextField();
+        profileNameField.setToolTipText("The name AWS CLI/SDK tools will reference via --profile or AWS_PROFILE");
+        profileNameLabel.setLabelFor(profileNameField);
         panel.add(profileNameField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
         panel.add(new JLabel("Identity Provider:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         samlProviderCombo = new JComboBox<>(configManager.getIdpProviders().toArray(new String[0]));
+        samlProviderCombo.setToolTipText("Which configured identity provider handles login for this profile");
         panel.add(samlProviderCombo, gbc);
 
         gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
         panel.add(new JLabel("Account Number:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         accountNumberField = new JTextField();
+        accountNumberField.setToolTipText("The 12-digit AWS account number to assume a role in");
         panel.add(accountNumberField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 3; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
         panel.add(new JLabel("IAM Role Name:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         iamRoleField = new JTextField();
+        iamRoleField.setToolTipText("The IAM role name (not the full ARN) to assume via the SAML response");
         panel.add(iamRoleField, gbc);
 
         add(panel, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton cancelButton = new JButton("Cancel");
+        cancelButton.setMnemonic(KeyEvent.VK_C);
         JButton saveButton = new JButton("Save");
+        saveButton.setMnemonic(KeyEvent.VK_S);
         cancelButton.addActionListener(e -> setVisible(false));
         saveButton.addActionListener(e -> onSave());
         buttonPanel.add(cancelButton);

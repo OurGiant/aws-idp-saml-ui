@@ -7,6 +7,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Clipboard;
+import java.awt.event.KeyEvent;
 
 /**
  * Dialog for displaying credentials in various formats.
@@ -54,6 +55,7 @@ public class CredentialsDialog extends JDialog {
         // Button panel
         JPanel buttonPanel = new JPanel(new FlowLayout());
         JButton closeButton = new JButton("Close");
+        closeButton.setMnemonic(KeyEvent.VK_L);
         closeButton.addActionListener(e -> setVisible(false));
         buttonPanel.add(closeButton);
         add(buttonPanel, BorderLayout.SOUTH);
@@ -77,6 +79,7 @@ public class CredentialsDialog extends JDialog {
         textArea.setText(sb.toString());
 
         JButton copyButton = new JButton("Copy to Clipboard");
+        copyButton.setMnemonic(KeyEvent.VK_C);
         copyButton.addActionListener(e -> copyToClipboard(textArea.getText()));
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -110,6 +113,7 @@ public class CredentialsDialog extends JDialog {
         }
 
         JButton copyButton = new JButton("Copy to Clipboard");
+        copyButton.setMnemonic(KeyEvent.VK_C);
         copyButton.addActionListener(e -> copyToClipboard(textArea.getText()));
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
