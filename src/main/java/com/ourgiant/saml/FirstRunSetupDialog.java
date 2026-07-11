@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -91,7 +92,9 @@ public class FirstRunSetupDialog extends JDialog {
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton cancelButton = new JButton("Cancel");
+        cancelButton.setMnemonic(KeyEvent.VK_C);
         JButton saveButton = new JButton("Save & Launch");
+        saveButton.setMnemonic(KeyEvent.VK_S);
         cancelButton.addActionListener(e -> confirmCancel());
         saveButton.addActionListener(e -> save());
         buttonPanel.add(cancelButton);
@@ -125,6 +128,7 @@ public class FirstRunSetupDialog extends JDialog {
         panel.add(new JLabel("Session Duration (minutes):"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         sessionDurationSpinner = new JSpinner(new SpinnerNumberModel(240, 15, 720, 15));
+        sessionDurationSpinner.setToolTipText("How long requested AWS credentials remain valid before they expire");
         panel.add(sessionDurationSpinner, gbc);
 
         return panel;
@@ -139,6 +143,7 @@ public class FirstRunSetupDialog extends JDialog {
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         idpTypeCombo = new JComboBox<>(IDP_PRESETS.keySet().toArray(new String[0]));
         idpTypeCombo.addActionListener(e -> applyIdpPreset());
+        idpTypeCombo.setToolTipText("Prefills the fields below with a starting point for this identity provider");
         panel.add(idpTypeCombo, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
@@ -151,12 +156,14 @@ public class FirstRunSetupDialog extends JDialog {
         panel.add(new JLabel("Login Page URL:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         loginPageField = new JTextField();
+        loginPageField.setToolTipText("The SAML-initiated login URL your browser is sent to first");
         panel.add(loginPageField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 3; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
         panel.add(new JLabel("Login Page Title:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         loginTitleField = new JTextField();
+        loginTitleField.setToolTipText("The browser page title used to detect that the login page has loaded");
         panel.add(loginTitleField, gbc);
 
         applyIdpPreset();
