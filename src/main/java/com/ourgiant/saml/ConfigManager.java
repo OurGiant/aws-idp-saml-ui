@@ -278,6 +278,48 @@ public class ConfigManager {
     }
 
     /**
+     * Get list of configured identity provider section names (e.g. "Fed-Okta")
+     */
+    public List<String> getIdpProviders() {
+        List<String> idps = new ArrayList<>();
+        for (String section : config.keySet()) {
+            if (section.startsWith("Fed-")) {
+                idps.add(section);
+            }
+        }
+        idps.sort(String.CASE_INSENSITIVE_ORDER);
+        return idps;
+    }
+
+    /**
+     * Creates or updates a profile section with the given fields and persists to disk.
+     */
+    public void saveProfile(String profileName, Map<String, String> fields) throws Exception {
+        Profile.Section section = config.get(profileName);
+        if (section == null) {
+            section = config.add(profileName);
+        }
+        for (Map.Entry<String, String> entry : fields.entrySet()) {
+            section.put(entry.getKey(), entry.getValue());
+        }
+        persistConfig();
+    }
+
+    /**
+     * Removes a profile section and persists to disk.
+     */
+    public void deleteProfile(String profileName) throws Exception {
+        config.remove(profileName);
+        persistConfig();
+    }
+
+    private void persistConfig() throws Exception {
+        File configFile = new File(configFilePath);
+        config.store(configFile);
+        logger.info("Configuration file updated at: {}", configFilePath);
+    }
+
+    /**
      * Returns true if the config file exists on disk.
      */
     public static boolean configFileExists() {

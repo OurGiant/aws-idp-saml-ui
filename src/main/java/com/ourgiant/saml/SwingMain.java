@@ -171,6 +171,10 @@ public class SwingMain extends JFrame {
         JMenuBar menuBar = new JMenuBar();
         JMenu fileMenu = new JMenu("File");
 
+        JMenuItem manageProfilesMenuItem = new JMenuItem("Manage Profiles...");
+        manageProfilesMenuItem.addActionListener(e -> showProfileManagerDialog());
+        fileMenu.add(manageProfilesMenuItem);
+
         JMenuItem configMenuItem = new JMenuItem("Configuration...");
         configMenuItem.addActionListener(e -> showConfigurationDialog());
         fileMenu.add(configMenuItem);
@@ -561,6 +565,15 @@ public class SwingMain extends JFrame {
     private void showConfigurationDialog() {
         ConfigurationDialog dialog = new ConfigurationDialog(this, configManager, databaseManager, passwordManager);
         dialog.setVisible(true);
+    }
+
+    private void showProfileManagerDialog() {
+        ProfileManagerDialog dialog = new ProfileManagerDialog(this, configManager);
+        dialog.setVisible(true);
+        if (dialog.isProfilesChanged()) {
+            loadProfiles();
+            refreshStatusTable();
+        }
     }
 
     private void showCredentialsDialog(boolean showEncrypted, boolean showPlaintext) {
