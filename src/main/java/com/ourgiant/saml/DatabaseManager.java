@@ -163,6 +163,15 @@ public class DatabaseManager {
         setConfig("use_fastpass", String.valueOf(enabled));
     }
 
+    public boolean getTrayNotificationsEnabled() {
+        String value = getConfig("tray_notifications_enabled");
+        return value == null || "true".equalsIgnoreCase(value); // Enabled by default
+    }
+
+    public void setTrayNotificationsEnabled(boolean enabled) {
+        setConfig("tray_notifications_enabled", String.valueOf(enabled));
+    }
+
     // Intentionally not seeded in insertDefaultConfig(): an absent value lets
     // ConfigManager.getBrowserType() fall back to the samlsts "browser" key
     // (set during first-run setup) until the user explicitly saves a choice here.
