@@ -154,8 +154,9 @@ public class SwingMain extends JFrame {
         tokenStatusTable = new JTable(tokenStatusTableModel);
         tokenStatusTable.setFillsViewportHeight(true);
         tokenStatusTable.setRowHeight(26);
-        tokenStatusTable.setToolTipText("Click a row to select that profile above");
+        tokenStatusTable.setToolTipText("Click a row to select that profile above, or right-click for actions");
         tokenStatusTable.getColumnModel().getColumn(1).setCellRenderer(new StatusTableCellRenderer());
+        JPopupMenu tableContextMenu = createTableContextMenu();
         tokenStatusTable.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent e) {
@@ -164,6 +165,30 @@ public class SwingMain extends JFrame {
                     String profile = (String) tokenStatusTableModel.getValueAt(row, 0);
                     profileComboBox.setSelectedItem(profile);
                 }
+            }
+
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                maybeShowContextMenu(e);
+            }
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                maybeShowContextMenu(e);
+            }
+
+            private void maybeShowContextMenu(java.awt.event.MouseEvent e) {
+                if (!e.isPopupTrigger()) {
+                    return;
+                }
+                int row = tokenStatusTable.rowAtPoint(e.getPoint());
+                if (row < 0) {
+                    return;
+                }
+                tokenStatusTable.setRowSelectionInterval(row, row);
+                String profile = (String) tokenStatusTableModel.getValueAt(row, 0);
+                profileComboBox.setSelectedItem(profile);
+                tableContextMenu.show(tokenStatusTable, e.getX(), e.getY());
             }
         });
 
@@ -609,63 +634,66 @@ public class SwingMain extends JFrame {
     private class RequestCredentialsListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
-            String selectedProfile = (String) profileComboBox.getSelectedItem();
-            if (selectedProfile == null) {
-                JOptionPane.showMessageDialog(SwingMain.this,
-                    "Please select a profile first.",
-                    "No Profile Selected",
-                    JOptionPane.WARNING_MESSAGE);
-                return;
+            requestCredentialsForProfile((String) profileComboBox.getSelectedItem());
+        }
+    }
+
+    private void requestCredentialsForProfile(String selectedProfile) {
+        if (selectedProfile == null) {
+            JOptionPane.showMessageDialog(SwingMain.this,
+                "Please select a profile first.",
+                "No Profile Selected",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Disable button during processing
+        requestCredentialsButton.setEnabled(false);
+        requestCredentialsButton.setText("Requesting...");
+        credentialRequestInProgress = true;
+        loginProgressBar.setVisible(true);
+        statusLabel.setText("Starting credential request for profile: " + selectedProfile + "...");
+
+        // Run credential request in background thread
+        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                SamlAuthenticator authenticator = new SamlAuthenticator();
+                authenticator.requestCredentials(
+                    selectedProfile,
+                    databaseManager.getFastPassEnabled(),
+                    showBrowserCheckBox.isSelected(),
+                    msg -> SwingUtilities.invokeLater(() -> statusLabel.setText(msg))
+                );
+                return null;
             }
 
-            // Disable button during processing
-            requestCredentialsButton.setEnabled(false);
-            requestCredentialsButton.setText("Requesting...");
-            credentialRequestInProgress = true;
-            loginProgressBar.setVisible(true);
-            statusLabel.setText("Starting credential request for profile: " + selectedProfile + "...");
+            @Override
+            protected void done() {
+                requestCredentialsButton.setEnabled(true);
+                requestCredentialsButton.setText("Request Credentials");
+                credentialRequestInProgress = false;
+                loginProgressBar.setVisible(false);
 
-            // Run credential request in background thread
-            SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
-                @Override
-                protected Void doInBackground() throws Exception {
-                    SamlAuthenticator authenticator = new SamlAuthenticator();
-                    authenticator.requestCredentials(
-                        selectedProfile,
-                        databaseManager.getFastPassEnabled(),
-                        showBrowserCheckBox.isSelected(),
-                        msg -> SwingUtilities.invokeLater(() -> statusLabel.setText(msg))
-                    );
-                    return null;
+                try {
+                    get(); // Check for exceptions
+                    refreshStatusTable();
+                    updateCredentialButtons();
+                    statusLabel.setText("Credentials successfully obtained for profile: " + selectedProfile);
+                    JOptionPane.showMessageDialog(SwingMain.this,
+                        "Credentials successfully obtained for profile: " + selectedProfile,
+                        "Success",
+                        JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    statusLabel.setText("Error obtaining credentials: " + ex.getMessage());
+                    JOptionPane.showMessageDialog(SwingMain.this,
+                        "Error obtaining credentials: " + ex.getMessage(),
+                        "Authentication Error",
+                        JOptionPane.ERROR_MESSAGE);
                 }
-
-                @Override
-                protected void done() {
-                    requestCredentialsButton.setEnabled(true);
-                    requestCredentialsButton.setText("Request Credentials");
-                    credentialRequestInProgress = false;
-                    loginProgressBar.setVisible(false);
-
-                    try {
-                        get(); // Check for exceptions
-                        refreshStatusTable();
-                        updateCredentialButtons();
-                        statusLabel.setText("Credentials successfully obtained for profile: " + selectedProfile);
-                        JOptionPane.showMessageDialog(SwingMain.this,
-                            "Credentials successfully obtained for profile: " + selectedProfile,
-                            "Success",
-                            JOptionPane.INFORMATION_MESSAGE);
-                    } catch (Exception ex) {
-                        statusLabel.setText("Error obtaining credentials: " + ex.getMessage());
-                        JOptionPane.showMessageDialog(SwingMain.this,
-                            "Error obtaining credentials: " + ex.getMessage(),
-                            "Authentication Error",
-                            JOptionPane.ERROR_MESSAGE);
-                    }
-                }
-            };
-            worker.execute();
-        }
+            }
+        };
+        worker.execute();
     }
 
     private static class StatusTableCellRenderer extends DefaultTableCellRenderer {
@@ -700,8 +728,90 @@ public class SwingMain extends JFrame {
         }
     }
 
+    private JPopupMenu createTableContextMenu() {
+        JPopupMenu menu = new JPopupMenu();
+
+        JMenuItem requestItem = new JMenuItem("Request Credentials");
+        requestItem.addActionListener(e -> requestCredentialsForProfile((String) profileComboBox.getSelectedItem()));
+        menu.add(requestItem);
+
+        JMenuItem showItem = new JMenuItem("Show Credentials");
+        showItem.addActionListener(e -> showCredentialsDialogForProfile((String) profileComboBox.getSelectedItem(), false, true));
+        menu.add(showItem);
+
+        JMenuItem showEncryptedItem = new JMenuItem("Show Encrypted Credentials");
+        showEncryptedItem.addActionListener(e -> showCredentialsDialogForProfile((String) profileComboBox.getSelectedItem(), true, false));
+        menu.add(showEncryptedItem);
+
+        JMenuItem openConsoleItem = new JMenuItem("Open Console");
+        openConsoleItem.addActionListener(e -> openAwsConsoleForProfile((String) profileComboBox.getSelectedItem()));
+        menu.add(openConsoleItem);
+
+        menu.addSeparator();
+
+        JMenuItem deleteItem = new JMenuItem("Delete Profile...");
+        deleteItem.addActionListener(e -> deleteProfileFromContextMenu((String) profileComboBox.getSelectedItem()));
+        menu.add(deleteItem);
+
+        menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+                String profile = (String) profileComboBox.getSelectedItem();
+                boolean hasCredentials = profile != null && credentialManager.getCredentials(profile) != null;
+                java.nio.file.Path publicKeyPath = java.nio.file.Paths.get(System.getProperty("user.home"), ".aws", "public_key.pem");
+                boolean hasPublicKey = java.nio.file.Files.exists(publicKeyPath);
+
+                requestItem.setEnabled(profile != null);
+                showItem.setEnabled(hasCredentials);
+                showEncryptedItem.setEnabled(hasCredentials && hasPublicKey);
+                openConsoleItem.setEnabled(hasCredentials);
+                deleteItem.setEnabled(profile != null);
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+            }
+
+            @Override
+            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+            }
+        });
+
+        return menu;
+    }
+
+    private void deleteProfileFromContextMenu(String profileName) {
+        if (profileName == null) {
+            return;
+        }
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "Delete profile \"" + profileName + "\"? This cannot be undone.",
+            "Delete Profile",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try {
+            configManager.deleteProfile(profileName);
+            loadProfiles();
+            refreshStatusTable();
+        } catch (Exception ex) {
+            logger.error("Failed to delete profile: {}", profileName, ex);
+            JOptionPane.showMessageDialog(this,
+                "Failed to delete profile: " + ex.getMessage(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     private void showCredentialsDialog(boolean showEncrypted, boolean showPlaintext) {
-        String selectedProfile = (String) profileComboBox.getSelectedItem();
+        showCredentialsDialogForProfile((String) profileComboBox.getSelectedItem(), showEncrypted, showPlaintext);
+    }
+
+    private void showCredentialsDialogForProfile(String selectedProfile, boolean showEncrypted, boolean showPlaintext) {
         if (selectedProfile == null) {
             JOptionPane.showMessageDialog(this,
                 "Please select a profile first.",
@@ -738,7 +848,10 @@ public class SwingMain extends JFrame {
     }
 
     private void openAwsConsole() {
-        String selectedProfile = (String) profileComboBox.getSelectedItem();
+        openAwsConsoleForProfile((String) profileComboBox.getSelectedItem());
+    }
+
+    private void openAwsConsoleForProfile(String selectedProfile) {
         if (selectedProfile == null) {
             JOptionPane.showMessageDialog(this,
                 "Please select a profile first.",
