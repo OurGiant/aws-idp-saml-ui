@@ -1,5 +1,6 @@
 package com.ourgiant.saml;
 
+import com.formdev.flatlaf.FlatLaf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -704,13 +705,25 @@ public class SwingMain extends JFrame {
             if (column == 1 && value instanceof String status) {
                 switch (status) {
                     case "VALID" -> component.setForeground(new Color(0, 128, 0));
-                    case "EXPIRED" -> component.setForeground(Color.RED);
-                    default -> component.setForeground(Color.GRAY);
+                    case "EXPIRED" -> component.setForeground(expiredForeground());
+                    default -> component.setForeground(unknownForeground());
                 }
             } else {
                 component.setForeground(isSelected ? table.getSelectionForeground() : table.getForeground());
             }
             return component;
+        }
+
+        // Re-read per paint rather than caching statically so a theme switch takes effect immediately.
+        private static Color unknownForeground() {
+            Color disabled = UIManager.getColor("Label.disabledForeground");
+            return disabled != null ? disabled : Color.GRAY;
+        }
+
+        // FlatLaf.isLafDark() returns false for non-FlatLaf LaFs (Nimbus/Metal), which falls
+        // through to the light-background red — a sensible default there too.
+        private static Color expiredForeground() {
+            return FlatLaf.isLafDark() ? new Color(255, 110, 110) : Color.RED;
         }
     }
 
@@ -941,7 +954,24 @@ public class SwingMain extends JFrame {
                 }
             }
 
-            new SwingMain().setVisible(true);
+            SwingMain mainWindow = new SwingMain();
+            mainWindow.setVisible(true);
+            syncWindowPositionWithWindowManager(mainWindow);
         });
+    }
+
+    /**
+     * On Linux/X11 the window manager confirms a window's real on-screen position
+     * asynchronously after setVisible(true); FlatLaf's heavyweight popups (e.g. the
+     * File menu) compute their screen position from that value, so clicking a menu
+     * before the confirmation lands can render the popup at (0,0). Manually moving
+     * the window fixes it by forcing a fresh position round-trip — nudge it
+     * programmatically right after showing it so the fix applies before the user
+     * can click anything.
+     */
+    private static void syncWindowPositionWithWindowManager(Window window) {
+        Point location = window.getLocation();
+        window.setLocation(location.x + 1, location.y);
+        window.setLocation(location.x, location.y);
     }
 }

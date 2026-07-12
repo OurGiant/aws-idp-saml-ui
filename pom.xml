@@ -94,6 +94,12 @@
             <artifactId>flatlaf-intellij-themes</artifactId>
             <version>3.4.1</version>
         </dependency>
+        <!-- FlatLaf Extras (FlatAnimatedLafChange for smooth theme-switch transitions) -->
+        <dependency>
+            <groupId>com.formdev</groupId>
+            <artifactId>flatlaf-extras</artifactId>
+            <version>3.4.1</version>
+        </dependency>
 
         <!-- Testing -->
         <dependency>
