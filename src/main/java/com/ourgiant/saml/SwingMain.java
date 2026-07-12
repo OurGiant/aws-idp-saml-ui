@@ -50,6 +50,7 @@ public class SwingMain extends JFrame {
     private JProgressBar loginProgressBar;
     private Timer statusRefreshTimer;
     private volatile boolean credentialRequestInProgress = false;
+    private boolean loadingProfiles = false;
 
     private TrayIcon trayIcon;
     private final Map<String, Instant> lastNotifiedExpiration = new HashMap<>();
@@ -101,7 +102,10 @@ public class SwingMain extends JFrame {
         profilePanel.add(selectProfileLabel);
         profileComboBox = new JComboBox<>();
         profileComboBox.setPreferredSize(new Dimension(220, 25));
-        profileComboBox.addActionListener(e -> updateCredentialButtons());
+        profileComboBox.addActionListener(e -> {
+            updateCredentialButtons();
+            saveLastUsedProfile();
+        });
         profileComboBox.setToolTipText("The AWS profile to authenticate and fetch credentials for");
         selectProfileLabel.setLabelFor(profileComboBox);
         profilePanel.add(profileComboBox);
@@ -473,10 +477,15 @@ public class SwingMain extends JFrame {
     }
 
     private void restoreFromTray() {
+        boolean wasVisible = isVisible();
         setVisible(true);
         setExtendedState(JFrame.NORMAL);
         toFront();
         requestFocus();
+        if (!wasVisible) {
+            // First real show when launched minimized skips main()'s post-show fix; apply it here.
+            syncWindowPositionWithWindowManager(this);
+        }
     }
 
     private void exitApplication() {
@@ -620,15 +629,38 @@ public class SwingMain extends JFrame {
     private void loadProfiles() {
         try {
             List<String> profiles = configManager.getAvailableProfiles();
-            profileComboBox.removeAllItems();
-            for (String profile : profiles) {
-                profileComboBox.addItem(profile);
+            String lastUsedProfile = databaseManager.getLastUsedProfile();
+
+            // JComboBox auto-selects the first added item, firing the selection listener
+            // before the real last-used profile can be restored below; suppress persistence
+            // during this programmatic rebuild so that transient selection doesn't clobber it.
+            loadingProfiles = true;
+            try {
+                profileComboBox.removeAllItems();
+                for (String profile : profiles) {
+                    profileComboBox.addItem(profile);
+                }
+                if (lastUsedProfile != null && profiles.contains(lastUsedProfile)) {
+                    profileComboBox.setSelectedItem(lastUsedProfile);
+                }
+            } finally {
+                loadingProfiles = false;
             }
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
                 "Error loading profiles: " + e.getMessage(),
                 "Configuration Error",
                 JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void saveLastUsedProfile() {
+        if (loadingProfiles) {
+            return;
+        }
+        String selectedProfile = (String) profileComboBox.getSelectedItem();
+        if (selectedProfile != null) {
+            databaseManager.setLastUsedProfile(selectedProfile);
         }
     }
 
@@ -955,8 +987,11 @@ public class SwingMain extends JFrame {
             }
 
             SwingMain mainWindow = new SwingMain();
-            mainWindow.setVisible(true);
-            syncWindowPositionWithWindowManager(mainWindow);
+            boolean startMinimized = mainWindow.trayIcon != null && mainWindow.databaseManager.getStartMinimizedToTray();
+            if (!startMinimized) {
+                mainWindow.setVisible(true);
+                syncWindowPositionWithWindowManager(mainWindow);
+            }
         });
     }
 
