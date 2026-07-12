@@ -281,10 +281,9 @@ public class ConfigurationDialog extends JDialog {
                 logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}, tray_notifications = {}",
                     durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass, trayNotificationsEnabled);
 
-                // Apply theme immediately
-                if (ThemeManager.applyTheme(selectedTheme)) {
-                    SwingUtilities.updateComponentTreeUI(getParent());
-                } else {
+                // Apply theme immediately — ThemeManager refreshes all open windows,
+                // including this dialog, so it re-themes live.
+                if (!ThemeManager.applyTheme(selectedTheme)) {
                     logger.warn("Failed to apply theme immediately: {}", selectedTheme);
                 }
 
