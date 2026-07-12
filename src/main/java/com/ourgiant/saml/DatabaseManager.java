@@ -184,6 +184,25 @@ public class DatabaseManager {
         setConfig("browser", browser);
     }
 
+    // Intentionally not seeded: an absent value means no profile has been used yet,
+    // letting the profile combo box fall back to its default (first alphabetically).
+    public String getLastUsedProfile() {
+        return getConfig("last_used_profile");
+    }
+
+    public void setLastUsedProfile(String profile) {
+        setConfig("last_used_profile", profile);
+    }
+
+    public boolean getStartMinimizedToTray() {
+        String value = getConfig("start_minimized_to_tray");
+        return "true".equalsIgnoreCase(value); // Disabled by default
+    }
+
+    public void setStartMinimizedToTray(boolean enabled) {
+        setConfig("start_minimized_to_tray", String.valueOf(enabled));
+    }
+
     // Token state methods
     public void updateExpiration(String profileName, Instant expiration) {
         if (profileName == null || expiration == null) {

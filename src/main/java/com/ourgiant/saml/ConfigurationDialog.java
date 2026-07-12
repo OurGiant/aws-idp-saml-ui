@@ -28,6 +28,7 @@ public class ConfigurationDialog extends JDialog {
     private JComboBox<String> browserComboBox;
     private JCheckBox useFastPassCheckBox;
     private JCheckBox trayNotificationsCheckBox;
+    private JCheckBox startMinimizedCheckBox;
     private JButton saveButton;
     private JButton cancelButton;
 
@@ -61,6 +62,7 @@ public class ConfigurationDialog extends JDialog {
         outerGbc.gridy = 3; outerPanel.add(buildBrowserSection(), outerGbc);
         outerGbc.gridy = 4; outerPanel.add(buildAuthSection(), outerGbc);
         outerGbc.gridy = 5; outerPanel.add(buildNotificationsSection(), outerGbc);
+        outerGbc.gridy = 6; outerPanel.add(buildStartupSection(), outerGbc);
 
         add(outerPanel, BorderLayout.CENTER);
 
@@ -194,6 +196,23 @@ public class ConfigurationDialog extends JDialog {
         return panel;
     }
 
+    private JPanel buildStartupSection() {
+        JPanel panel = titledPanel("Startup");
+        GridBagConstraints gbc = sectionGbc();
+
+        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
+        startMinimizedCheckBox = new JCheckBox("Start minimized to tray");
+        startMinimizedCheckBox.setMnemonic(KeyEvent.VK_M);
+        boolean traySupported = SystemTray.isSupported();
+        startMinimizedCheckBox.setEnabled(traySupported);
+        startMinimizedCheckBox.setToolTipText(traySupported
+            ? "Skip showing the main window on launch; the app starts hidden in the system tray"
+            : "System tray is not available on this platform/environment");
+        panel.add(startMinimizedCheckBox, gbc);
+
+        return panel;
+    }
+
     private static JPanel titledPanel(String title) {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createTitledBorder(title));
@@ -249,6 +268,8 @@ public class ConfigurationDialog extends JDialog {
 
         trayNotificationsCheckBox.setSelected(databaseManager.getTrayNotificationsEnabled());
 
+        startMinimizedCheckBox.setSelected(databaseManager.getStartMinimizedToTray());
+
         updatePasswordExpirationEnabled();
     }
 
@@ -278,8 +299,11 @@ public class ConfigurationDialog extends JDialog {
                 boolean trayNotificationsEnabled = trayNotificationsCheckBox.isSelected();
                 databaseManager.setTrayNotificationsEnabled(trayNotificationsEnabled);
 
-                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}, tray_notifications = {}",
-                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass, trayNotificationsEnabled);
+                boolean startMinimized = startMinimizedCheckBox.isSelected();
+                databaseManager.setStartMinimizedToTray(startMinimized);
+
+                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}, tray_notifications = {}, start_minimized_to_tray = {}",
+                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass, trayNotificationsEnabled, startMinimized);
 
                 // Apply theme immediately — ThemeManager refreshes all open windows,
                 // including this dialog, so it re-themes live.
