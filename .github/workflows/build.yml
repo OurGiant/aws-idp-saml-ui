@@ -8,13 +8,11 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
     defaults:
       run:
         shell: bash
-    permissions: 
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -44,20 +42,83 @@ jobs:
             --name "AWS IDP SAML" \
             --app-version ${{ steps.version.outputs.version }} \
             --type app-image \
+            --icon src/packaging/app-icon.ico \
             --dest installer-output
-            
+
       - name: Zip app image
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           cd installer-output
           7z a ../AWS-IDP-SAML-${{ steps.version.outputs.version }}.zip "AWS IDP SAML"
-          
-      - name: Create GitHub Release
+
+      - name: Upload Windows artifacts
         if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            AWS-IDP-SAML-${{ steps.version.outputs.version }}.zip
+            target/aws-idp-saml-ui-all.jar
+
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 24
+        uses: actions/setup-java@v4
+        with:
+          java-version: '24'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn package
+
+      - name: Get version from pom.xml
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: version
+        run: echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
+
+      - name: Create .deb package with jpackage
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          jpackage \
+            --input target/ \
+            --main-jar aws-idp-saml-ui-all.jar \
+            --main-class com.ourgiant.saml.SwingMain \
+            --name aws-idp-saml \
+            --app-version ${{ steps.version.outputs.version }} \
+            --vendor OurGiant \
+            --type deb \
+            --icon src/main/resources/saml_swing_icon_small.png \
+            --dest installer-output
+
+      - name: Upload Linux artifacts
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: installer-output/*.deb
+
+  release:
+    needs: [ build-windows, build-linux ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ github.ref_name }}
-          files: |
-            AWS-IDP-SAML-${{ steps.version.outputs.version }}.zip
-            target/aws-idp-saml-ui-all.jar
+          files: release-artifacts/*
           generate_release_notes: true
