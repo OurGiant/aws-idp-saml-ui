@@ -227,6 +227,7 @@ public class SwingMain extends JFrame {
         add(statusPanel, BorderLayout.SOUTH);
 
         pack();
+        setMinimumSize(getSize());
         setLocationRelativeTo(null);
     }
 

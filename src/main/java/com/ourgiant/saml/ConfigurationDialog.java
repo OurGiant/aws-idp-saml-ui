@@ -41,6 +41,7 @@ public class ConfigurationDialog extends JDialog {
         initializeUI();
         loadCurrentSettings();
         pack();
+        setMinimumSize(getSize());
         setLocationRelativeTo(parent);
     }
 
