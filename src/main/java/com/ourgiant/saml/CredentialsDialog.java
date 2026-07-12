@@ -28,6 +28,7 @@ public class CredentialsDialog extends JDialog {
 
         initializeUI();
         pack();
+        setMinimumSize(getSize());
         setLocationRelativeTo(parent);
     }
 
