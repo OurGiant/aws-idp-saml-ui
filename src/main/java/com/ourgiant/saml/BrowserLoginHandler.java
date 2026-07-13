@@ -8,7 +8,10 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.time.Duration;
+import java.util.concurrent.CancellationException;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Handles browser automation for SAML login
@@ -25,10 +28,11 @@ public class BrowserLoginHandler {
     private final String accountNumber;
     private final String iamRole;
     private final Consumer<String> statusCallback;
+    private final BooleanSupplier cancelled;
 
     public BrowserLoginHandler(WebDriver driver, boolean useOktaFastPass, PasswordManager passwordManager,
                                 boolean showBrowser, String accountNumber, String iamRole,
-                                Consumer<String> statusCallback) {
+                                Consumer<String> statusCallback, BooleanSupplier cancelled) {
         this.driver = driver;
         this.wait = new WebDriverWait(driver, Duration.ofSeconds(30));
         this.useOktaFastPass = useOktaFastPass;
@@ -37,6 +41,20 @@ public class BrowserLoginHandler {
         this.accountNumber = accountNumber;
         this.iamRole = iamRole;
         this.statusCallback = statusCallback;
+        this.cancelled = cancelled;
+    }
+
+    // Every wait.until(...) call in this class should go through here instead of calling it
+    // directly. Checking the cancellation flag before evaluating the real condition lets a
+    // cancelled request fail within one poll interval, without needing Thread.interrupt() — which
+    // was tried first and left the browser process orphaned (see SamlAuthenticator.cancel()).
+    private <V> V until(WebDriverWait waitInstance, Function<WebDriver, V> condition) {
+        return waitInstance.until(driver -> {
+            if (cancelled.getAsBoolean()) {
+                throw new CancellationException("Login cancelled");
+            }
+            return condition.apply(driver);
+        });
     }
 
     /**
@@ -50,7 +68,7 @@ public class BrowserLoginHandler {
             driver.get(loginUrl);
 
             statusCallback.accept("Waiting for login page to load...");
-            wait.until(ExpectedConditions.titleContains(loginTitle));
+            until(wait, ExpectedConditions.titleContains(loginTitle));
 
             return handleOktaLogin(username);
 
@@ -78,11 +96,11 @@ public class BrowserLoginHandler {
         // Wait for and fill username field
         try {
             statusCallback.accept("Entering username: " + username + "...");
-            WebElement usernameField = wait.until(ExpectedConditions.elementToBeClickable(By.name("identifier")));
+            WebElement usernameField = until(wait, ExpectedConditions.elementToBeClickable(By.name("identifier")));
             usernameField.clear();
             usernameField.sendKeys(username);
 
-            WebElement nextButton = wait.until(ExpectedConditions.elementToBeClickable(By.className("button-primary")));
+            WebElement nextButton = until(wait, ExpectedConditions.elementToBeClickable(By.className("button-primary")));
             nextButton.click();
         } catch (TimeoutException e) {
             logger.info("Okta username field not found; checking for managed-device MFA flow");
@@ -104,13 +122,13 @@ public class BrowserLoginHandler {
         }
 
         try {
-            WebElement passwordField = wait.until(ExpectedConditions.elementToBeClickable(By.name("credentials.passcode")));
+            WebElement passwordField = until(wait, ExpectedConditions.elementToBeClickable(By.name("credentials.passcode")));
             statusCallback.accept("Entering password...");
             String password = promptForPassword();
             passwordField.clear();
             passwordField.sendKeys(password);
 
-            WebElement signInButton = wait.until(ExpectedConditions.elementToBeClickable(By.className("button-primary")));
+            WebElement signInButton = until(wait, ExpectedConditions.elementToBeClickable(By.className("button-primary")));
             signInButton.click();
 
         } catch (TimeoutException e) {
@@ -132,7 +150,7 @@ public class BrowserLoginHandler {
     private boolean isIntermediateVerifificationPage() {
         try {
             WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(10));
-            shortWait.until(ExpectedConditions.presenceOfElementLocated(By.linkText("Back to sign in")));
+            until(shortWait, ExpectedConditions.presenceOfElementLocated(By.linkText("Back to sign in")));
         } catch (TimeoutException e) {
             logger.info("Not on intermediate verification page");
             return false;
@@ -141,7 +159,7 @@ public class BrowserLoginHandler {
         try {
             // Wait for the page to stabilise after detecting the intermediate screen
             WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(3));
-            shortWait.until(ExpectedConditions.presenceOfElementLocated(By.className("select-factor")));
+            until(shortWait, ExpectedConditions.presenceOfElementLocated(By.className("select-factor")));
             return true;
         } catch (TimeoutException e) {
             return true; // "Back to sign in" was found; treat as intermediate page regardless
@@ -156,7 +174,7 @@ public class BrowserLoginHandler {
             By usePasswordLocator = By.xpath(
                 "//a[@aria-label='Select Password.']" 
             );
-            WebElement usePasswordOption = wait.until(ExpectedConditions.elementToBeClickable(usePasswordLocator));
+            WebElement usePasswordOption = until(wait, ExpectedConditions.elementToBeClickable(usePasswordLocator));
             usePasswordOption.click();
         } catch (TimeoutException e) {
             logger.warn("Could not find option to switch to password entry on intermediate verification page", e);
@@ -166,7 +184,7 @@ public class BrowserLoginHandler {
     private boolean isPreAuthenticatedOktaMfaScreen() {
         try {
             WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(10));
-            shortWait.until(ExpectedConditions.presenceOfElementLocated(By.linkText("Back to sign in")));
+            until(shortWait, ExpectedConditions.presenceOfElementLocated(By.linkText("Back to sign in")));
             String pageSource = driver.getPageSource();
             boolean hasMfaIndicator = pageSource.contains("class=\"button select-factor link-button\"");
             return hasMfaIndicator;
@@ -188,7 +206,7 @@ public class BrowserLoginHandler {
             By fastPassLocator = By.xpath(
                 "//a[@aria-label='Select Okta Verify.'] | //a[contains(@aria-label,'Okta Verify')]"
             );
-            WebElement fastPassOption = wait.until(ExpectedConditions.elementToBeClickable(fastPassLocator));
+            WebElement fastPassOption = until(wait, ExpectedConditions.elementToBeClickable(fastPassLocator));
             fastPassOption.click();
         } catch (TimeoutException e) {
             throw new RuntimeException("Could not find Okta FastPass selection button on managed-device login screen", e);
@@ -204,7 +222,7 @@ public class BrowserLoginHandler {
         // First check if autoChallenge is present and checked, which would indicate we can skip clicking the button
         try {
             WebDriverWait probeWait = new WebDriverWait(driver, Duration.ofSeconds(3));
-            WebElement autoChallengeElement = probeWait.until(ExpectedConditions.presenceOfElementLocated(By.name("autoChallenge")));
+            WebElement autoChallengeElement = until(probeWait, ExpectedConditions.presenceOfElementLocated(By.name("autoChallenge")));
             if (autoChallengeElement.isSelected()) {
                 logger.info("Okta auto-challenge is enabled, skipping click");
                 return;
@@ -216,7 +234,7 @@ public class BrowserLoginHandler {
         logger.info("Clicking Okta MFA push selection");
 
         try {
-            WebElement mfaOption = wait.until(ExpectedConditions.elementToBeClickable(selectionLocator));
+            WebElement mfaOption = until(wait, ExpectedConditions.elementToBeClickable(selectionLocator));
             mfaOption.click();
         } catch (TimeoutException e) {
             throw new RuntimeException("Could not find Okta MFA push selection button on managed-device login screen", e);
@@ -225,7 +243,7 @@ public class BrowserLoginHandler {
         // On Windows an extra "Send Push" confirmation page appears after selecting the MFA method; not present on Linux
         try {
             WebDriverWait probeWait = new WebDriverWait(driver, Duration.ofSeconds(5));
-            WebElement sendPushButton = probeWait.until(ExpectedConditions.elementToBeClickable(By.xpath("//input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']")));
+            WebElement sendPushButton = until(probeWait, ExpectedConditions.elementToBeClickable(By.xpath("//input[@class='button button-primary' and @type='submit' and @value='Send push' and @data-type='save']")));
             sendPushButton.click();
         } catch (TimeoutException e) {
             logger.info("Send Push button not found after clicking Okta Verify selection, which may be expected on some platforms");
@@ -288,15 +306,15 @@ public class BrowserLoginHandler {
         logger.info("Waiting for SAML response...");
 
         statusCallback.accept("Waiting for redirect to AWS sign-in page...");
-        wait.until(ExpectedConditions.urlContains("signin.aws.amazon.com"));
+        until(wait, ExpectedConditions.urlContains("signin.aws.amazon.com"));
 
         statusCallback.accept("Capturing SAML response...");
 
         // Try to find SAML response in form
         String samlResponse = null;
         try {
-            WebElement samlResponseElement = wait.until(
-                ExpectedConditions.presenceOfElementLocated(By.name("SAMLResponse"))
+            WebElement samlResponseElement = until(
+                wait, ExpectedConditions.presenceOfElementLocated(By.name("SAMLResponse"))
             );
 
             samlResponse = samlResponseElement.getAttribute("value");
@@ -349,7 +367,7 @@ public class BrowserLoginHandler {
         );
 
         try {
-            WebElement roleElement = wait.until(ExpectedConditions.elementToBeClickable(By.xpath(roleXpath)));
+            WebElement roleElement = until(wait, ExpectedConditions.elementToBeClickable(By.xpath(roleXpath)));
             roleElement.click();
             logger.info("Role element clicked");
         } catch (TimeoutException e) {
