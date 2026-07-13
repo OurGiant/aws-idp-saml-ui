@@ -55,6 +55,9 @@ public class SwingMain extends JFrame {
     private JProgressBar loginProgressBar;
     private Timer statusRefreshTimer;
     private volatile boolean credentialRequestInProgress = false;
+    private SamlAuthenticator activeAuthenticator;
+    private SwingWorker<Void, Void> activeCredentialWorker;
+    private boolean credentialRequestCancelledByUser = false;
     private boolean loadingProfiles = false;
 
     private TrayIcon trayIcon;
@@ -702,7 +705,11 @@ public class SwingMain extends JFrame {
     private class RequestCredentialsListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
-            requestCredentialsForProfile((String) profileComboBox.getSelectedItem());
+            if (credentialRequestInProgress) {
+                cancelCredentialRequest();
+            } else {
+                requestCredentialsForProfile((String) profileComboBox.getSelectedItem());
+            }
         }
     }
 
@@ -715,18 +722,29 @@ public class SwingMain extends JFrame {
             return;
         }
 
-        // Disable button during processing
-        requestCredentialsButton.setEnabled(false);
-        requestCredentialsButton.setText("Requesting...");
+        if (credentialRequestInProgress) {
+            JOptionPane.showMessageDialog(SwingMain.this,
+                "A credential request is already in progress. Cancel it first or wait for it to finish.",
+                "Request In Progress",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Swap the button to a Cancel affordance during processing
+        requestCredentialsButton.setText("Cancel");
+        requestCredentialsButton.setToolTipText("Cancel the in-progress credential request");
         credentialRequestInProgress = true;
+        credentialRequestCancelledByUser = false;
         loginProgressBar.setVisible(true);
         statusLabel.setText("Starting credential request for profile: " + selectedProfile + "...");
+
+        SamlAuthenticator authenticator = new SamlAuthenticator();
+        activeAuthenticator = authenticator;
 
         // Run credential request in background thread
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                SamlAuthenticator authenticator = new SamlAuthenticator();
                 authenticator.requestCredentials(
                     selectedProfile,
                     databaseManager.getFastPassEnabled(),
@@ -738,10 +756,17 @@ public class SwingMain extends JFrame {
 
             @Override
             protected void done() {
-                requestCredentialsButton.setEnabled(true);
                 requestCredentialsButton.setText("Request Credentials");
+                requestCredentialsButton.setToolTipText("Launch browser login and fetch AWS credentials for the selected profile");
                 credentialRequestInProgress = false;
                 loginProgressBar.setVisible(false);
+                activeAuthenticator = null;
+                activeCredentialWorker = null;
+
+                if (credentialRequestCancelledByUser) {
+                    statusLabel.setText("Credential request cancelled for profile: " + selectedProfile);
+                    return;
+                }
 
                 try {
                     get(); // Check for exceptions
@@ -759,7 +784,19 @@ public class SwingMain extends JFrame {
                 }
             }
         };
+        activeCredentialWorker = worker;
         worker.execute();
+    }
+
+    private void cancelCredentialRequest() {
+        statusLabel.setText("Cancelling credential request...");
+        credentialRequestCancelledByUser = true;
+        if (activeAuthenticator != null) {
+            activeAuthenticator.cancel();
+        }
+        if (activeCredentialWorker != null) {
+            activeCredentialWorker.cancel(true);
+        }
     }
 
     private void showCredentialErrorDialog(String selectedProfile, CredentialRequestError error) {
