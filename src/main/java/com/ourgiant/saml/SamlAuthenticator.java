@@ -31,7 +31,6 @@ public class SamlAuthenticator {
     private final ConfigManager configManager;
     private final CredentialManager credentialManager;
     private final PasswordManager passwordManager;
-    private volatile WebDriver activeDriver;
     private volatile boolean cancelled = false;
 
     public SamlAuthenticator() {
@@ -40,18 +39,14 @@ public class SamlAuthenticator {
         this.passwordManager = new PasswordManager(new DatabaseManager());
     }
 
-    // Best-effort async quit (off-thread so the EDT never blocks on it); the prompt unblock of
-    // an active Selenium wait actually comes from the paired SwingWorker.cancel(true) interrupt
-    // in SwingMain, not this quit() — quitting alone just queues behind an active wait. Known
-    // gap: that interrupt can leave the browser process orphaned even though the UI recovers.
+    // Just sets a flag that BrowserLoginHandler checks between polls of every Selenium wait,
+    // so a blocked wait fails within one poll interval on the SAME thread that's using the
+    // driver — the request thread's own existing exception handling then quits it normally.
+    // Deliberately not Thread.interrupt()-based: that was tried first and reliably left the
+    // browser process orphaned, apparently because interrupting a thread mid-blocking-I/O can
+    // leave the WebDriver's HTTP client unusable for the cleanup quit() that follows.
     public void cancel() {
         cancelled = true;
-        WebDriver driver = activeDriver;
-        if (driver != null) {
-            Thread cleanupThread = new Thread(driver::quit, "cancelled-webdriver-cleanup");
-            cleanupThread.setDaemon(true);
-            cleanupThread.start();
-        }
     }
 
     /**
@@ -127,16 +122,14 @@ public class SamlAuthenticator {
         statusCallback.accept("Launching browser...");
 
         WebDriver driver = createWebDriver(showBrowser);
-        activeDriver = driver;
         try {
             BrowserLoginHandler loginHandler = new BrowserLoginHandler(driver, useOktaFastPass, passwordManager,
-                    showBrowser, accountNumber, iamRole, statusCallback);
+                    showBrowser, accountNumber, iamRole, statusCallback, () -> cancelled);
             return loginHandler.performLogin(loginUrl, loginTitle, username);
         } catch (Exception e) {
             driver.quit();
             throw e;
         } finally {
-            activeDriver = null;
             if (!showBrowser) {
                 driver.quit();
             }
