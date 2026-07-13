@@ -19,6 +19,7 @@ import java.io.File;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
 
 /**
@@ -30,11 +31,27 @@ public class SamlAuthenticator {
     private final ConfigManager configManager;
     private final CredentialManager credentialManager;
     private final PasswordManager passwordManager;
+    private volatile WebDriver activeDriver;
+    private volatile boolean cancelled = false;
 
     public SamlAuthenticator() {
         this.configManager = new ConfigManager();
         this.credentialManager = new CredentialManager();
         this.passwordManager = new PasswordManager(new DatabaseManager());
+    }
+
+    // Best-effort async quit (off-thread so the EDT never blocks on it); the prompt unblock of
+    // an active Selenium wait actually comes from the paired SwingWorker.cancel(true) interrupt
+    // in SwingMain, not this quit() — quitting alone just queues behind an active wait. Known
+    // gap: that interrupt can leave the browser process orphaned even though the UI recovers.
+    public void cancel() {
+        cancelled = true;
+        WebDriver driver = activeDriver;
+        if (driver != null) {
+            Thread cleanupThread = new Thread(driver::quit, "cancelled-webdriver-cleanup");
+            cleanupThread.setDaemon(true);
+            cleanupThread.start();
+        }
     }
 
     /**
@@ -74,6 +91,10 @@ public class SamlAuthenticator {
         String samlResponse = performBrowserLogin(loginUrl, loginTitle, username, useOktaFastPass, showBrowser,
                 accountNumber, iamRole, statusCallback);
 
+        if (cancelled) {
+            throw new CancellationException("Credential request cancelled for profile: " + profileName);
+        }
+
         // Parse SAML and get role ARN
         statusCallback.accept("Parsing SAML response...");
         SamlParser samlParser = new SamlParser();
@@ -106,6 +127,7 @@ public class SamlAuthenticator {
         statusCallback.accept("Launching browser...");
 
         WebDriver driver = createWebDriver(showBrowser);
+        activeDriver = driver;
         try {
             BrowserLoginHandler loginHandler = new BrowserLoginHandler(driver, useOktaFastPass, passwordManager,
                     showBrowser, accountNumber, iamRole, statusCallback);
@@ -114,6 +136,7 @@ public class SamlAuthenticator {
             driver.quit();
             throw e;
         } finally {
+            activeDriver = null;
             if (!showBrowser) {
                 driver.quit();
             }
