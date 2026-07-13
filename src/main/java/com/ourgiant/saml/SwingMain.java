@@ -59,6 +59,7 @@ public class SwingMain extends JFrame {
     private SwingWorker<Void, Void> activeCredentialWorker;
     private boolean credentialRequestCancelledByUser = false;
     private boolean loadingProfiles = false;
+    private String contextMenuTargetProfile;
 
     private TrayIcon trayIcon;
     private final Map<String, Instant> lastNotifiedExpiration = new HashMap<>();
@@ -202,6 +203,10 @@ public class SwingMain extends JFrame {
                 }
                 tokenStatusTable.setRowSelectionInterval(row, row);
                 String profile = (String) tokenStatusTableModel.getValueAt(tokenStatusTable.convertRowIndexToModel(row), 0);
+                // The dropdown can't reflect profiles that only exist via saved credentials/token
+                // state (not defined in samlsts) — setSelectedItem silently no-ops for those. Track
+                // the right-clicked profile directly so menu actions always target the right row.
+                contextMenuTargetProfile = profile;
                 profileComboBox.setSelectedItem(profile);
                 tableContextMenu.show(tokenStatusTable, e.getX(), e.getY());
             }
@@ -871,31 +876,31 @@ public class SwingMain extends JFrame {
         JPopupMenu menu = new JPopupMenu();
 
         JMenuItem requestItem = new JMenuItem("Request Credentials");
-        requestItem.addActionListener(e -> requestCredentialsForProfile((String) profileComboBox.getSelectedItem()));
+        requestItem.addActionListener(e -> requestCredentialsForProfile(contextMenuTargetProfile));
         menu.add(requestItem);
 
         JMenuItem showItem = new JMenuItem("Show Credentials");
-        showItem.addActionListener(e -> showCredentialsDialogForProfile((String) profileComboBox.getSelectedItem(), false, true));
+        showItem.addActionListener(e -> showCredentialsDialogForProfile(contextMenuTargetProfile, false, true));
         menu.add(showItem);
 
         JMenuItem showEncryptedItem = new JMenuItem("Show Encrypted Credentials");
-        showEncryptedItem.addActionListener(e -> showCredentialsDialogForProfile((String) profileComboBox.getSelectedItem(), true, false));
+        showEncryptedItem.addActionListener(e -> showCredentialsDialogForProfile(contextMenuTargetProfile, true, false));
         menu.add(showEncryptedItem);
 
         JMenuItem openConsoleItem = new JMenuItem("Open Console");
-        openConsoleItem.addActionListener(e -> openAwsConsoleForProfile((String) profileComboBox.getSelectedItem()));
+        openConsoleItem.addActionListener(e -> openAwsConsoleForProfile(contextMenuTargetProfile));
         menu.add(openConsoleItem);
 
         menu.addSeparator();
 
         JMenuItem deleteItem = new JMenuItem("Delete Profile...");
-        deleteItem.addActionListener(e -> deleteProfileFromContextMenu((String) profileComboBox.getSelectedItem()));
+        deleteItem.addActionListener(e -> deleteProfileFromContextMenu(contextMenuTargetProfile));
         menu.add(deleteItem);
 
         menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
             @Override
             public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-                String profile = (String) profileComboBox.getSelectedItem();
+                String profile = contextMenuTargetProfile;
                 boolean hasCredentials = profile != null && credentialManager.getCredentials(profile) != null;
                 java.nio.file.Path publicKeyPath = java.nio.file.Paths.get(System.getProperty("user.home"), ".aws", "public_key.pem");
                 boolean hasPublicKey = java.nio.file.Files.exists(publicKeyPath);
