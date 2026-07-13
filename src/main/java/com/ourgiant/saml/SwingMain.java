@@ -719,15 +719,37 @@ public class SwingMain extends JFrame {
                         "Success",
                         JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception ex) {
-                    statusLabel.setText("Error obtaining credentials: " + ex.getMessage());
-                    JOptionPane.showMessageDialog(SwingMain.this,
-                        "Error obtaining credentials: " + ex.getMessage(),
-                        "Authentication Error",
-                        JOptionPane.ERROR_MESSAGE);
+                    CredentialRequestError error = CredentialRequestError.classify(ex);
+                    statusLabel.setText(error.statusMessage());
+                    showCredentialErrorDialog(selectedProfile, error);
                 }
             }
         };
         worker.execute();
+    }
+
+    private void showCredentialErrorDialog(String selectedProfile, CredentialRequestError error) {
+        if (error.retryable()) {
+            Object[] options = {"Retry", "Close"};
+            int choice = JOptionPane.showOptionDialog(
+                this,
+                error.htmlMessage(),
+                error.title(),
+                JOptionPane.DEFAULT_OPTION,
+                error.iconMessageType(),
+                null,
+                options,
+                options[0]
+            );
+            if (choice == 0) {
+                requestCredentialsForProfile(selectedProfile);
+            }
+        } else {
+            JOptionPane.showMessageDialog(this,
+                error.htmlMessage(),
+                error.title(),
+                error.iconMessageType());
+        }
     }
 
     private static class StatusTableCellRenderer extends DefaultTableCellRenderer {
