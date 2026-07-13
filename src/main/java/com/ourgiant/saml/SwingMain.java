@@ -5,8 +5,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -28,6 +31,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 /**
  * Main Swing application for AWS SAML authentication
@@ -45,6 +49,7 @@ public class SwingMain extends JFrame {
 
     private DefaultTableModel tokenStatusTableModel;
     private JTable tokenStatusTable;
+    private TableRowSorter<DefaultTableModel> tokenStatusRowSorter;
     private JLabel lastRefreshedLabel;
     private JLabel statusLabel;
     private JProgressBar loginProgressBar;
@@ -159,15 +164,17 @@ public class SwingMain extends JFrame {
         tokenStatusTable = new JTable(tokenStatusTableModel);
         tokenStatusTable.setFillsViewportHeight(true);
         tokenStatusTable.setRowHeight(26);
-        tokenStatusTable.setToolTipText("Click a row to select that profile above, or right-click for actions");
+        tokenStatusTable.setToolTipText("Click a row to select that profile above, or right-click for actions. Click a column header to sort.");
         tokenStatusTable.getColumnModel().getColumn(1).setCellRenderer(new StatusTableCellRenderer());
+        tokenStatusRowSorter = new TableRowSorter<>(tokenStatusTableModel);
+        tokenStatusTable.setRowSorter(tokenStatusRowSorter);
         JPopupMenu tableContextMenu = createTableContextMenu();
         tokenStatusTable.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent e) {
                 int row = tokenStatusTable.rowAtPoint(e.getPoint());
                 if (row >= 0) {
-                    String profile = (String) tokenStatusTableModel.getValueAt(row, 0);
+                    String profile = (String) tokenStatusTableModel.getValueAt(tokenStatusTable.convertRowIndexToModel(row), 0);
                     profileComboBox.setSelectedItem(profile);
                 }
             }
@@ -191,11 +198,30 @@ public class SwingMain extends JFrame {
                     return;
                 }
                 tokenStatusTable.setRowSelectionInterval(row, row);
-                String profile = (String) tokenStatusTableModel.getValueAt(row, 0);
+                String profile = (String) tokenStatusTableModel.getValueAt(tokenStatusTable.convertRowIndexToModel(row), 0);
                 profileComboBox.setSelectedItem(profile);
                 tableContextMenu.show(tokenStatusTable, e.getX(), e.getY());
             }
         });
+
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JLabel filterLabel = new JLabel("Filter:");
+        filterPanel.add(filterLabel);
+        JTextField profileFilterField = new JTextField(20);
+        profileFilterField.setToolTipText("Narrow the table below to profiles whose name contains this text");
+        filterLabel.setLabelFor(profileFilterField);
+        filterPanel.add(profileFilterField);
+        profileFilterField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) { applyProfileFilter(profileFilterField.getText()); }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) { applyProfileFilter(profileFilterField.getText()); }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) { applyProfileFilter(profileFilterField.getText()); }
+        });
+        tokenStatusPanel.add(filterPanel, BorderLayout.NORTH);
 
         JScrollPane tableScrollPane = new JScrollPane(tokenStatusTable);
         tokenStatusPanel.add(tableScrollPane, BorderLayout.CENTER);
@@ -584,6 +610,14 @@ public class SwingMain extends JFrame {
             }
             System.err.println("Status table update failed: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    private void applyProfileFilter(String filterText) {
+        if (filterText == null || filterText.isBlank()) {
+            tokenStatusRowSorter.setRowFilter(null);
+        } else {
+            tokenStatusRowSorter.setRowFilter(RowFilter.regexFilter("(?i)" + Pattern.quote(filterText), 0));
         }
     }
 
