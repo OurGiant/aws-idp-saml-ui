@@ -32,7 +32,7 @@
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>sts</artifactId>
-            <version>2.46.21</version>
+            <version>2.47.5</version>
         </dependency>
 
         <!-- XML Processing -->
@@ -58,7 +58,7 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.33</version>
+            <version>1.5.36</version>
         </dependency>
 
         <!-- Utilities -->
