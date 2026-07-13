@@ -130,8 +130,6 @@ jobs:
         id: version
         run: echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
 
-      # TODO: no .icns icon exists yet in src/packaging/ (only app-icon.ico, for Windows) — generate
-      # one from src/main/resources/saml_swing_icon_small.png and pass --icon here once it exists.
       - name: Create .dmg with jpackage
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -143,6 +141,7 @@ jobs:
             --app-version ${{ steps.version.outputs.version }} \
             --vendor OurGiant \
             --type dmg \
+            --icon src/packaging/app-icon.icns \
             --dest installer-output
 
       - name: Rename dmg for this architecture
