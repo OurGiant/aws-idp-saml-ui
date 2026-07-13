@@ -56,7 +56,6 @@ public class SwingMain extends JFrame {
     private Timer statusRefreshTimer;
     private volatile boolean credentialRequestInProgress = false;
     private SamlAuthenticator activeAuthenticator;
-    private SwingWorker<Void, Void> activeCredentialWorker;
     private boolean credentialRequestCancelledByUser = false;
     private boolean loadingProfiles = false;
     private String contextMenuTargetProfile;
@@ -766,7 +765,6 @@ public class SwingMain extends JFrame {
                 credentialRequestInProgress = false;
                 loginProgressBar.setVisible(false);
                 activeAuthenticator = null;
-                activeCredentialWorker = null;
 
                 if (credentialRequestCancelledByUser) {
                     statusLabel.setText("Credential request cancelled for profile: " + selectedProfile);
@@ -789,7 +787,6 @@ public class SwingMain extends JFrame {
                 }
             }
         };
-        activeCredentialWorker = worker;
         worker.execute();
     }
 
@@ -798,9 +795,6 @@ public class SwingMain extends JFrame {
         credentialRequestCancelledByUser = true;
         if (activeAuthenticator != null) {
             activeAuthenticator.cancel();
-        }
-        if (activeCredentialWorker != null) {
-            activeCredentialWorker.cancel(true);
         }
     }
 
