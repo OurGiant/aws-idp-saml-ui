@@ -2,8 +2,11 @@ package com.ourgiant.saml;
 
 import org.apache.commons.codec.binary.Base64;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -56,6 +59,33 @@ class SamlParserTest {
                 <samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol">
                 </samlp:Response>
                 """;
+
+        assertThrows(Exception.class, () -> parser.parseRolesFromSaml(encode(saml)));
+    }
+
+    @Test
+    void parseRolesFromSaml_rejectsDoctypeDeclarations(@TempDir Path tempDir) throws Exception {
+        // Regression test for the XXE fix: a malicious/compromised IdP could otherwise smuggle a
+        // DOCTYPE with an external entity to read local files (or trigger SSRF via an external DTD).
+        // Legitimate SAML responses never contain a DOCTYPE, so parsing must reject it outright
+        // rather than silently resolving the entity.
+        Path secretFile = tempDir.resolve("secret.txt");
+        Files.writeString(secretFile, "top-secret-contents");
+
+        String saml = """
+                <?xml version="1.0"?>
+                <!DOCTYPE foo [<!ENTITY xxe SYSTEM "%s">]>
+                <samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
+                                 xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">
+                  <saml:Assertion>
+                    <saml:AttributeStatement>
+                      <saml:Attribute Name="https://aws.amazon.com/SAML/Attributes/Role">
+                        <saml:AttributeValue>&xxe;</saml:AttributeValue>
+                      </saml:Attribute>
+                    </saml:AttributeStatement>
+                  </saml:Assertion>
+                </samlp:Response>
+                """.formatted(secretFile.toUri());
 
         assertThrows(Exception.class, () -> parser.parseRolesFromSaml(encode(saml)));
     }
