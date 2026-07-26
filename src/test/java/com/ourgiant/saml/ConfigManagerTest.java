@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -21,6 +22,7 @@ class ConfigManagerTest {
     Path tempHome;
 
     private String originalUserHome;
+    private ConfigManager configManager;
 
     @BeforeEach
     void setUp() {
@@ -29,7 +31,15 @@ class ConfigManagerTest {
     }
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws Exception {
+        // ConfigManager's DatabaseManager keeps its SQLite connection open for the manager's
+        // lifetime; closing it here releases the file lock so @TempDir can delete it (Windows
+        // fails the whole test run otherwise - it errors on open file handles, unlike Linux/macOS).
+        if (configManager != null) {
+            Field field = ConfigManager.class.getDeclaredField("databaseManager");
+            field.setAccessible(true);
+            ((DatabaseManager) field.get(configManager)).close();
+        }
         System.setProperty("user.home", originalUserHome);
     }
 
@@ -53,7 +63,7 @@ class ConfigManagerTest {
                 loginpage = https://example.okta.com/app/foo/sso/saml
                 """);
 
-        ConfigManager configManager = new ConfigManager();
+        configManager = new ConfigManager();
         configManager.saveProfile("Fed-OKTA", Map.of("logintitle", "Fed OKTA Login"));
 
         String written = readSamlsts();
@@ -72,7 +82,7 @@ class ConfigManagerTest {
                 loginpage = https\\://example.okta.com/app/foo/sso/saml
                 """);
 
-        ConfigManager configManager = new ConfigManager();
+        configManager = new ConfigManager();
         assertEquals("https://example.okta.com/app/foo/sso/saml",
                 configManager.getProfile("Fed-OKTA").get("loginpage"));
 
@@ -84,7 +94,7 @@ class ConfigManagerTest {
 
     @Test
     void createConfig_doesNotEscapeColonsInUrls() throws Exception {
-        ConfigManager configManager = new ConfigManager(false);
+        configManager = new ConfigManager(false);
 
         Map<String, String> global = new LinkedHashMap<>();
         global.put("idp_entry_url", "https://example.okta.com/app/example/sso/saml");
