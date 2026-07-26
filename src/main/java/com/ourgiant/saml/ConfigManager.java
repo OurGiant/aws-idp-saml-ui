@@ -1,5 +1,6 @@
 package com.ourgiant.saml;
 
+import org.ini4j.Config;
 import org.ini4j.Ini;
 import org.ini4j.Profile;
 import org.slf4j.Logger;
@@ -47,6 +48,7 @@ public class ConfigManager {
                     "\nPlease copy samlsts.demo to ~/.aws/samlsts and configure it.");
             }
             config = new Ini(configFile);
+            disableValueEscaping(config);
             logger.info("Configuration loaded from: {}", configFilePath);
         } catch (Exception e) {
             logger.error("Failed to load configuration", e);
@@ -313,6 +315,19 @@ public class ConfigManager {
         persistConfig();
     }
 
+    /**
+     * ini4j's default Config escapes ':' (and other delimiter-like characters) in values, turning
+     * URLs like "https://..." into "https\://..." on store(). The original Python CLI's ini parser
+     * doesn't understand that escaping, so it breaks compatibility (see #89). {@code Ini} instances
+     * share {@link Config#getGlobal()} by reference unless given their own, so this clones the config
+     * onto this instance rather than mutating the shared global one out from under every other Ini.
+     */
+    private static void disableValueEscaping(Ini ini) {
+        Config perInstanceConfig = ini.getConfig().clone();
+        perInstanceConfig.setEscape(false);
+        ini.setConfig(perInstanceConfig);
+    }
+
     private void persistConfig() throws Exception {
         File configFile = new File(configFilePath);
         config.store(configFile);
@@ -337,6 +352,7 @@ public class ConfigManager {
         configFile.getParentFile().mkdirs();
 
         Ini ini = new Ini();
+        disableValueEscaping(ini);
         for (Map.Entry<String, Map<String, String>> section : sections.entrySet()) {
             ini.add(section.getKey());
             for (Map.Entry<String, String> entry : section.getValue().entrySet()) {
