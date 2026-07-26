@@ -203,6 +203,16 @@ public class DatabaseManager {
         setConfig("start_minimized_to_tray", String.valueOf(enabled));
     }
 
+    // Intentionally not seeded: an absent value means no update has been auto-surfaced yet,
+    // so the silent startup check should show the first newer version it ever finds.
+    public String getLastNotifiedUpdateVersion() {
+        return getConfig("last_notified_update_version");
+    }
+
+    public void setLastNotifiedUpdateVersion(String version) {
+        setConfig("last_notified_update_version", version);
+    }
+
     // Token state methods
     public void updateExpiration(String profileName, Instant expiration) {
         if (profileName == null || expiration == null) {
