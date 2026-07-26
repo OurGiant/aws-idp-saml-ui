@@ -83,6 +83,7 @@ public class SwingMain extends JFrame {
         loadProfiles();
         refreshStatusTable();
         startStatusPolling();
+        checkForUpdatesInBackground();
     }
 
     private void setLookAndFeel() {
@@ -301,6 +302,15 @@ public class SwingMain extends JFrame {
     }
 
     private void showAboutDialog() {
+        showAboutDialog(null);
+    }
+
+    /**
+     * @param knownNewerRelease if non-null (tagName-or-version, releaseUrl), an already-confirmed newer
+     *                          release to render immediately instead of performing a live GitHub check —
+     *                          used when the silent startup check already found and confirmed an update.
+     */
+    private void showAboutDialog(String[] knownNewerRelease) {
         final String currentVersion = resolveCurrentVersion();
 
         JPanel panel = new JPanel();
@@ -320,7 +330,7 @@ public class SwingMain extends JFrame {
         JLabel copyrightLabel = new JLabel("© OurGiant");
         copyrightLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        JLabel updateLabel = new JLabel("Checking for updates...");
+        JLabel updateLabel = new JLabel(knownNewerRelease != null ? "" : "Checking for updates...");
         updateLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         updateLabel.setForeground(Color.GRAY);
 
@@ -334,7 +344,70 @@ public class SwingMain extends JFrame {
         panel.add(Box.createVerticalStrut(8));
         panel.add(updateLabel);
 
-        SwingWorker<String[], Void> versionChecker = new SwingWorker<>() {
+        if (knownNewerRelease != null) {
+            applyUpdateAvailableLabel(updateLabel, knownNewerRelease[0], knownNewerRelease[1]);
+        } else {
+            SwingWorker<String[], Void> versionChecker = new SwingWorker<>() {
+                @Override
+                protected String[] doInBackground() {
+                    return fetchLatestRelease();
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        String[] release = get();
+                        if (release != null) {
+                            String latestTag = release[0];
+                            String releaseUrl = release[1];
+                            String latestVersion = latestTag.startsWith("v") ? latestTag.substring(1) : latestTag;
+                            if (isNewerVersion(latestVersion, currentVersion)) {
+                                applyUpdateAvailableLabel(updateLabel, latestVersion, releaseUrl);
+                            } else {
+                                updateLabel.setText("Up to date");
+                                updateLabel.setForeground(new Color(0, 128, 0));
+                            }
+                        } else {
+                            updateLabel.setText("Could not check for updates");
+                        }
+                    } catch (Exception e) {
+                        updateLabel.setText("Could not check for updates");
+                        logger.debug("Version check failed", e);
+                    }
+                    panel.revalidate();
+                    panel.repaint();
+                }
+            };
+            versionChecker.execute();
+        }
+
+        JOptionPane.showMessageDialog(this, panel, "About AWS IDP SAML UI", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    private void applyUpdateAvailableLabel(JLabel updateLabel, String latestVersion, String releaseUrl) {
+        updateLabel.setText("<html><a href=''>Version " + latestVersion + " available — click to download</a></html>");
+        updateLabel.setForeground(new Color(0, 102, 204));
+        updateLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        updateLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                try {
+                    Desktop.getDesktop().browse(new java.net.URI(releaseUrl));
+                } catch (Exception ex) {
+                    logger.warn("Could not open release URL in browser", ex);
+                }
+            }
+        });
+    }
+
+    /**
+     * Silently checks for a newer release in the background. Does nothing if up to date or if the
+     * check fails (offline, rate-limited, etc.) — failures are only logged at debug level, matching
+     * fetchLatestRelease()'s own convention. If a newer version is found that hasn't already been
+     * auto-surfaced, opens the About dialog pre-populated with that result (no redundant re-fetch).
+     */
+    private void checkForUpdatesInBackground() {
+        SwingWorker<String[], Void> worker = new SwingWorker<>() {
             @Override
             protected String[] doInBackground() {
                 return fetchLatestRelease();
@@ -344,42 +417,27 @@ public class SwingMain extends JFrame {
             protected void done() {
                 try {
                     String[] release = get();
-                    if (release != null) {
-                        String latestTag = release[0];
-                        String releaseUrl = release[1];
-                        String latestVersion = latestTag.startsWith("v") ? latestTag.substring(1) : latestTag;
-                        if (isNewerVersion(latestVersion, currentVersion)) {
-                            updateLabel.setText("<html><a href=''>Version " + latestVersion + " available — click to download</a></html>");
-                            updateLabel.setForeground(new Color(0, 102, 204));
-                            updateLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                            updateLabel.addMouseListener(new java.awt.event.MouseAdapter() {
-                                @Override
-                                public void mouseClicked(java.awt.event.MouseEvent e) {
-                                    try {
-                                        Desktop.getDesktop().browse(new java.net.URI(releaseUrl));
-                                    } catch (Exception ex) {
-                                        logger.warn("Could not open release URL in browser", ex);
-                                    }
-                                }
-                            });
-                        } else {
-                            updateLabel.setText("Up to date");
-                            updateLabel.setForeground(new Color(0, 128, 0));
-                        }
-                    } else {
-                        updateLabel.setText("Could not check for updates");
+                    if (release == null) {
+                        return;
                     }
+                    String latestTag = release[0];
+                    String releaseUrl = release[1];
+                    String latestVersion = latestTag.startsWith("v") ? latestTag.substring(1) : latestTag;
+                    String currentVersion = resolveCurrentVersion();
+                    if (!isNewerVersion(latestVersion, currentVersion)) {
+                        return;
+                    }
+                    if (latestVersion.equals(databaseManager.getLastNotifiedUpdateVersion())) {
+                        return;
+                    }
+                    databaseManager.setLastNotifiedUpdateVersion(latestVersion);
+                    showAboutDialog(new String[]{latestVersion, releaseUrl});
                 } catch (Exception e) {
-                    updateLabel.setText("Could not check for updates");
-                    logger.debug("Version check failed", e);
+                    logger.debug("Silent update check failed", e);
                 }
-                panel.revalidate();
-                panel.repaint();
             }
         };
-        versionChecker.execute();
-
-        JOptionPane.showMessageDialog(this, panel, "About AWS IDP SAML UI", JOptionPane.PLAIN_MESSAGE);
+        worker.execute();
     }
 
     private String resolveCurrentVersion() {
