@@ -34,6 +34,15 @@ public class SamlParser {
         // Parse XML
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
+        // samlResponse comes from the configured IdP's login response, not a trusted local file, so
+        // this must be hardened against XXE: a malicious/compromised IdP could otherwise smuggle a
+        // DOCTYPE with an external entity to read local files or trigger SSRF via an external DTD.
+        // Legitimate SAML responses never contain a DOCTYPE, so disallowing it entirely is safe.
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
         DocumentBuilder builder = factory.newDocumentBuilder();
         Document doc = builder.parse(new InputSource(new StringReader(decodedSaml)));
 
