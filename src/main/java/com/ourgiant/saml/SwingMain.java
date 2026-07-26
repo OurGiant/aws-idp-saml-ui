@@ -27,6 +27,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -562,9 +563,32 @@ public class SwingMain extends JFrame {
                     setVisible(false);
                 }
             });
+
+            if (isMacOs()) {
+                registerMacDockReopenHandler();
+            }
         } catch (Exception e) {
             logger.warn("Failed to initialize system tray icon; window close will exit the app.", e);
             trayIcon = null;
+        }
+    }
+
+    private static boolean isMacOs() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac");
+    }
+
+    /**
+     * On macOS the tray icon alone isn't a reliable way back into a hidden window - it can go
+     * unnoticed in a crowded menu bar. The Dock icon is always present (this app doesn't set
+     * LSUIElement), so clicking it while the app is running with no visible windows is the more
+     * discoverable fallback. There's no isSupported() capability query for AppReopenedListener; it
+     * silently no-ops on platforms that don't fire the event, so this is only registered on macOS.
+     */
+    private void registerMacDockReopenHandler() {
+        try {
+            Desktop.getDesktop().addAppEventListener((java.awt.desktop.AppReopenedListener) e -> restoreFromTray());
+        } catch (Exception e) {
+            logger.warn("Failed to register macOS Dock reopen handler", e);
         }
     }
 
