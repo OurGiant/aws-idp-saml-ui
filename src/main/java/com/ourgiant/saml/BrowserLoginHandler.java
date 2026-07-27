@@ -355,15 +355,44 @@ public class BrowserLoginHandler {
         return samlResponse;
     }
 
+    /**
+     * Builds a safe XPath string literal for an arbitrary value, avoiding XPath
+     * injection when the value contains quote characters. XPath has no escape
+     * character, so a value containing both quote types is split into
+     * concat() segments.
+     */
+    static String toXPathLiteral(String value) {
+        if (!value.contains("'")) {
+            return "'" + value + "'";
+        }
+        if (!value.contains("\"")) {
+            return "\"" + value + "\"";
+        }
+        String[] parts = value.split("'", -1);
+        StringBuilder sb = new StringBuilder("concat(");
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                sb.append(", \"'\", ");
+            }
+            sb.append('\'').append(parts[i]).append('\'');
+        }
+        sb.append(")");
+        return sb.toString();
+    }
+
     private void selectRoleAndSignIn() {
         logger.info("Selecting role {}:{} on AWS SAML page", accountNumber, iamRole);
         statusCallback.accept("Selecting AWS role " + iamRole + " on AWS console...");
 
         driver.manage().window().maximize();
 
-        // Role element ID is the full ARN; match by account number and role name
+        // Role element ID is the full ARN; match by account number and role name.
+        // Values are escaped into XPath string literals since accountNumber/iamRole
+        // come from profile config and could otherwise break out of the quoted
+        // contains(...) argument and alter the query (CWE-643).
         String roleXpath = String.format(
-            "//*[contains(@id, '::%s:') and contains(@id, '%s')]", accountNumber, iamRole
+            "//*[contains(@id, %s) and contains(@id, %s)]",
+            toXPathLiteral("::" + accountNumber + ":"), toXPathLiteral(iamRole)
         );
 
         try {
