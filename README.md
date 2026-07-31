@@ -1,102 +1,177 @@
 # AWS IDP SAML UI Client
 
-A Java Swing-based desktop application for AWS SAML authentication. This tool provides a user-friendly interface to manage SAML-based authentication with AWS Identity Providers, handle credentials, tokens, and profiles.
+[![Build and Release](https://github.com/OurGiant/aws-idp-saml-ui/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/OurGiant/aws-idp-saml-ui/actions/workflows/build.yml)
+[![Latest Release](https://img.shields.io/github/v/release/OurGiant/aws-idp-saml-ui)](https://github.com/OurGiant/aws-idp-saml-ui/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/OurGiant/aws-idp-saml-ui)](LICENSE)
+[![Java](https://img.shields.io/badge/Java-24-orange)](https://adoptium.net/)
+
+A Java Swing desktop client for SAML-based AWS federation. It drives the browser
+login flow against your identity provider (Okta, Azure AD, ADFS, Ping Identity,
+OneLogin, or any other SAML 2.0 IdP), exchanges the resulting assertion for
+temporary AWS credentials via STS, and gives you a single window to manage every
+profile you federate into — credentials, session expiration, and everything
+that touches AWS console/CLI access.
 
 ## Features
 
-- **SAML Authentication**: Parse and authenticate using SAML assertions from identity providers
-- **Credential Management**: Securely store and manage AWS credentials
-- **Token Management**: Handle temporary security tokens and their expiration
-- **Profile Support**: Manage multiple AWS profiles and configurations
-- **Database Storage**: Persistent storage using SQLite for credentials and settings
-- **Modern UI**: Swing interface with FlatLaf theming support
-- **Browser Integration**: Automated browser login handling with Selenium WebDriver
-- **Configuration Management**: INI-based configuration files
-- **Password Management**: Secure password handling and encryption
+**Authentication & profiles**
+- Browser-driven SAML login (Selenium WebDriver, Chrome or Firefox) against any SAML 2.0 identity provider
+- Okta FastPass support for password-less, device-based login
+- Guided first-run setup wizard with presets for Okta, Azure AD, ADFS, Ping Identity, and OneLogin
+- Manage any number of AWS profiles — add, edit, rename, and delete from the UI, backed by a standard `samlsts` INI config file
+- One-click AWS Management Console launch via the STS federation endpoint
+
+**Credential & token management**
+- Live credential status table with per-profile expiration and time remaining
+- Filter the table by name and by status (Valid / Expired / Unknown), independently or combined
+- Background auto-refresh (every 30s) plus a manual Refresh Status button
+- System tray notifications before a profile's credentials expire
+- Encrypted, hybrid AES/RSA credential export for handing session credentials to other tooling (e.g. automated deployment scripts) without exposing them in plain text
+- Automatic database cleanup: profiles removed from `samlsts` are pruned from local storage after a grace period, with a "Force Refresh" option in Settings to prune immediately
+
+**Interface**
+- FlatLaf-based UI with multiple light/dark themes
+- System tray integration, including start-minimized-to-tray and a macOS Dock reopen fallback
+- Silent background check for new releases, with an in-app prompt when one is available
+
+**Security**
+- Okta password storage is encrypted at rest with a configurable expiration, never stored in plain text
+- SQLite database and config files are locked to owner-only permissions on disk
+- SAML/XML parsing is hardened against XXE injection; AWS role-selection lookups are hardened against XPath injection
+
+**Distribution**
+- Native installers published on every tagged release: a Windows zip (jpackage app image), a macOS `.dmg` (Intel and Apple Silicon), and a Linux `.deb`
+- Nightly build of `main` published as a rolling pre-release for early testing
+
+## Download
+
+Prebuilt installers for Windows, macOS, and Linux are published on the
+[Releases page](https://github.com/OurGiant/aws-idp-saml-ui/releases). Grab the
+latest tagged release for a stable build, or the
+[nightly build](https://github.com/OurGiant/aws-idp-saml-ui/releases/tag/nightly)
+to try the latest `main`.
+
+Alternatively, download `aws-idp-saml-ui-all.jar` from any release and run it
+directly (see [Usage](#usage)) — this works on any platform with Java 24+
+installed and doesn't require an installer.
 
 ## Prerequisites
 
-- Java 24 or higher
-- Maven 3.6+
-- Web browser (for SAML authentication flow)
+- Java 24 or higher (only needed if running the jar directly or building from source — the platform installers bundle their own runtime)
+- Maven 3.6+ (build from source only)
+- A Chrome or Firefox browser, for the SAML login flow
+- Network access to your identity provider and to AWS
 
-## Installation
+## Building from Source
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/OurGiant/aws-idp-saml-ui.git
    cd aws-idp-saml-ui
    ```
 
-2. Build the project:
+2. Build and package:
    ```bash
-   mvn clean compile
+   mvn clean package
    ```
 
-3. Package the application:
-   ```bash
-   mvn package
-   ```
+   This produces `target/aws-idp-saml-ui-all.jar`, a self-contained uber-jar.
 
 ## Usage
 
 Run the application:
 ```bash
-java -jar target/aws-idp-saml-ui.jar
+java -jar target/aws-idp-saml-ui-all.jar
 ```
+
+On first launch, a setup wizard walks you through configuring your identity
+provider and your first AWS profile, and writes the result to `~/.aws/samlsts`.
 
 ### Main Interface
 
-- **Profile Selection**: Choose from configured AWS profiles
-- **Fast Pass Option**: Enable/disable fast authentication mode
-- **Request Credentials**: Initiate SAML authentication flow
-- **Token Status**: View current token expiration and status
-- **Configuration**: Access settings and preferences
+- **Select Profile**: choose which configured AWS profile to act on
+- **Fast Pass**: toggle Okta FastPass (device-based) login for the selected profile
+- **Request Credentials**: run the SAML login flow and obtain temporary AWS credentials
+- **Open Console**: launch the AWS Management Console in your browser using the current profile's credentials
+- **Credential Status table**: shows every known profile with its status, expiration time, and time remaining; filter by profile name and/or status, right-click a row for quick actions
+- **Configuration**: session duration, password storage, theme, browser, notifications, startup behavior, and a Force Refresh action to immediately clean up stale profiles
 
-### Configuration
+## Configuration
 
-The application uses INI configuration files and SQLite database for persistent storage. Configuration is managed through the UI dialogs.
+Profiles and identity provider settings live in `~/.aws/samlsts`, a standard
+INI file (`[global]` section for defaults, one section per profile, one
+`Fed-*` section per identity provider). It's normally managed entirely through
+the UI — the Profile Manager and Configuration dialogs — but can also be
+hand-edited; the app picks up profile changes on its next status refresh.
+
+Application settings (session duration, theme, stored password, last-used
+profile, etc.) and per-profile token state are kept in a local SQLite database
+at `~/.aws/aws_saml.db`, restricted to owner-only file permissions.
+
+## Sharing Credentials with Other Tools
+
+The Credentials dialog can export the active session's AWS credentials as an
+encrypted, hybrid AES/RSA-encoded string suitable for pasting into another
+tool's input (for example, an automated deployment script) without exposing
+the raw access key, secret key, or session token.
 
 ## Dependencies
 
-- **Selenium WebDriver**: Browser automation for SAML login
-- **AWS SDK for Java**: STS operations for temporary credentials
-- **Apache XML Security**: SAML assertion processing
-- **SQLite JDBC**: Database operations
-- **FlatLaf**: Modern Swing look and feel
-- **SLF4J/Logback**: Logging framework
-- **Apache Commons**: Utility functions
+- **Selenium WebDriver**: browser automation for the SAML login flow
+- **AWS SDK for Java (STS)**: exchanging SAML assertions for temporary credentials
+- **Apache Santuario (XML Security)** / hardened DOM parsing: SAML assertion processing
+- **SQLite JDBC**: local database storage
+- **ini4j**: `samlsts` config file parsing
+- **FlatLaf** (+ IntelliJ themes, extras): modern Swing look and feel
+- **SLF4J / Logback**: logging
+- **Apache Commons Lang / Codec**: utility functions
 
 ## Development
 
-### Building from Source
+### Building and Testing
 
 ```bash
-mvn clean install
+mvn clean install  # build, including tests
+mvn test            # run the test suite only
 ```
+
+Tests use JUnit 5 and Mockito.
 
 ### Project Structure
 
 ```
 src/main/java/com/ourgiant/saml/
 ├── SwingMain.java              # Main application window
-├── SamlAuthenticator.java      # SAML authentication logic
-├── SamlParser.java             # SAML assertion parsing
-├── CredentialManager.java      # AWS credential management
+├── FirstRunSetupDialog.java    # First-launch setup wizard
+├── SamlAuthenticator.java      # SAML authentication flow orchestration
+├── SamlParser.java             # SAML assertion parsing (XXE-hardened)
+├── BrowserLoginHandler.java    # Browser automation for the IdP login page
+├── AwsConsoleLauncher.java     # AWS federation console sign-in
+├── CredentialManager.java      # AWS credential file management
+├── CredentialsDialog.java      # Credential detail/export UI
 ├── TokenStateManager.java      # Token lifecycle management
 ├── DatabaseManager.java        # SQLite database operations
-├── ConfigManager.java          # Configuration handling
+├── ConfigManager.java          # samlsts config handling
+├── ConfigurationDialog.java    # Application settings UI
+├── ProfileManagerDialog.java   # Profile list management UI
+├── ProfileEditDialog.java      # Add/edit a single profile
 ├── PasswordManager.java        # Password encryption/decryption
-├── BrowserLoginHandler.java    # Browser automation
-├── ConfigurationDialog.java    # Settings UI
-├── CredentialsDialog.java      # Credential management UI
+├── FilePermissions.java        # Owner-only file permission enforcement
 ├── ThemeManager.java           # UI theming
 └── SamlRole.java               # SAML role representation
 ```
 
+### CI/CD
+
+Every push to `main` and every pull request builds on Windows, macOS
+(arm64 + x64), and Linux (see `.github/workflows/build.yml`). Tagged pushes
+(`v*`) additionally package and publish platform installers to a GitHub
+Release. A nightly workflow (`.github/workflows/nightly.yml`) rebuilds `main`
+and republishes it as a rolling pre-release.
+
 ## License
 
-See LICENSE file for details.
+MIT — see [LICENSE](LICENSE) for details.
 
 ## Contributing
 
@@ -107,7 +182,8 @@ See LICENSE file for details.
 
 ## Troubleshooting
 
-- Ensure Java 24 is installed and JAVA_HOME is set correctly
-- Check browser compatibility for Selenium WebDriver
-- Verify AWS configuration and SAML provider settings
-- Review logs in the application directory for error details
+- Ensure Java 24 is installed and `JAVA_HOME` is set correctly (not needed when using a platform installer)
+- Check browser compatibility for Selenium WebDriver (Chrome or Firefox)
+- Verify your `samlsts` configuration and SAML provider settings via the Configuration/Profile Manager dialogs
+- If a profile lingers in the status table after being removed from `samlsts`, use **Configuration → Force Refresh** to prune it immediately
+- Review the application log (`aws-saml-ui.log`, alongside the jar) for error details
