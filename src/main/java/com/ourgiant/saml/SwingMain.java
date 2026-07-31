@@ -52,6 +52,10 @@ public class SwingMain extends JFrame {
     private DefaultTableModel tokenStatusTableModel;
     private JTable tokenStatusTable;
     private TableRowSorter<DefaultTableModel> tokenStatusRowSorter;
+    private JTextField profileFilterField;
+    private JCheckBox validStatusFilterCheckBox;
+    private JCheckBox expiredStatusFilterCheckBox;
+    private JCheckBox unknownStatusFilterCheckBox;
     private JLabel lastRefreshedLabel;
     private JLabel statusLabel;
     private JProgressBar loginProgressBar;
@@ -217,20 +221,30 @@ public class SwingMain extends JFrame {
         JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JLabel filterLabel = new JLabel("Filter:");
         filterPanel.add(filterLabel);
-        JTextField profileFilterField = new JTextField(20);
+        profileFilterField = new JTextField(20);
         profileFilterField.setToolTipText("Narrow the table below to profiles whose name contains this text");
         filterLabel.setLabelFor(profileFilterField);
         filterPanel.add(profileFilterField);
         profileFilterField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
-            public void insertUpdate(DocumentEvent e) { applyProfileFilter(profileFilterField.getText()); }
+            public void insertUpdate(DocumentEvent e) { applyFilters(); }
 
             @Override
-            public void removeUpdate(DocumentEvent e) { applyProfileFilter(profileFilterField.getText()); }
+            public void removeUpdate(DocumentEvent e) { applyFilters(); }
 
             @Override
-            public void changedUpdate(DocumentEvent e) { applyProfileFilter(profileFilterField.getText()); }
+            public void changedUpdate(DocumentEvent e) { applyFilters(); }
         });
+
+        filterPanel.add(new JLabel("Status:"));
+        validStatusFilterCheckBox = new JCheckBox("Valid", true);
+        expiredStatusFilterCheckBox = new JCheckBox("Expired", true);
+        unknownStatusFilterCheckBox = new JCheckBox("Unknown", true);
+        for (JCheckBox statusCheckBox : new JCheckBox[]{validStatusFilterCheckBox, expiredStatusFilterCheckBox, unknownStatusFilterCheckBox}) {
+            statusCheckBox.setToolTipText("Uncheck to hide profiles with this status from the table below");
+            statusCheckBox.addActionListener(e -> applyFilters());
+            filterPanel.add(statusCheckBox);
+        }
         tokenStatusPanel.add(filterPanel, BorderLayout.NORTH);
 
         JScrollPane tableScrollPane = new JScrollPane(tokenStatusTable);
@@ -706,12 +720,26 @@ public class SwingMain extends JFrame {
         }
     }
 
-    private void applyProfileFilter(String filterText) {
-        if (filterText == null || filterText.isBlank()) {
-            tokenStatusRowSorter.setRowFilter(null);
-        } else {
-            tokenStatusRowSorter.setRowFilter(RowFilter.regexFilter("(?i)" + Pattern.quote(filterText), 0));
+    private void applyFilters() {
+        List<RowFilter<Object, Object>> filters = new ArrayList<>();
+
+        String filterText = profileFilterField.getText();
+        if (filterText != null && !filterText.isBlank()) {
+            filters.add(RowFilter.regexFilter("(?i)" + Pattern.quote(filterText), 0));
         }
+
+        Set<String> allowedStatuses = new HashSet<>();
+        if (validStatusFilterCheckBox.isSelected()) allowedStatuses.add("VALID");
+        if (expiredStatusFilterCheckBox.isSelected()) allowedStatuses.add("EXPIRED");
+        if (unknownStatusFilterCheckBox.isSelected()) allowedStatuses.add("UNKNOWN");
+        filters.add(new RowFilter<>() {
+            @Override
+            public boolean include(Entry<?, ?> entry) {
+                return allowedStatuses.contains(entry.getStringValue(1));
+            }
+        });
+
+        tokenStatusRowSorter.setRowFilter(RowFilter.andFilter(filters));
     }
 
     private int getStatusOrder(String status) {
