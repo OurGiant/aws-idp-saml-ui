@@ -8,6 +8,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
+import java.util.HashSet;
 
 /**
  * Configuration dialog for setting application options.
@@ -29,6 +30,7 @@ public class ConfigurationDialog extends JDialog {
     private JCheckBox useFastPassCheckBox;
     private JCheckBox trayNotificationsCheckBox;
     private JCheckBox startMinimizedCheckBox;
+    private JButton forceRefreshButton;
     private JButton saveButton;
     private JButton cancelButton;
 
@@ -64,6 +66,7 @@ public class ConfigurationDialog extends JDialog {
         outerGbc.gridy = 4; outerPanel.add(buildAuthSection(), outerGbc);
         outerGbc.gridy = 5; outerPanel.add(buildNotificationsSection(), outerGbc);
         outerGbc.gridy = 6; outerPanel.add(buildStartupSection(), outerGbc);
+        outerGbc.gridy = 7; outerPanel.add(buildDataSection(), outerGbc);
 
         add(outerPanel, BorderLayout.CENTER);
 
@@ -214,6 +217,20 @@ public class ConfigurationDialog extends JDialog {
         return panel;
     }
 
+    private JPanel buildDataSection() {
+        JPanel panel = titledPanel("Data");
+        GridBagConstraints gbc = sectionGbc();
+
+        gbc.gridx = 1; gbc.gridy = 0; gbc.anchor = GridBagConstraints.EAST;
+        forceRefreshButton = new JButton("Force Refresh");
+        forceRefreshButton.setMnemonic(KeyEvent.VK_F);
+        forceRefreshButton.addActionListener(e -> forceRefreshProfiles());
+        forceRefreshButton.setToolTipText("Immediately purge stored status for profiles no longer present in the samlsts config");
+        panel.add(forceRefreshButton, gbc);
+
+        return panel;
+    }
+
     private static JPanel titledPanel(String title) {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createTitledBorder(title));
@@ -250,6 +267,28 @@ public class ConfigurationDialog extends JDialog {
             forgetPasswordButton.setEnabled(false);
             logger.info("Stored password cleared by user");
             JOptionPane.showMessageDialog(this, "Stored password cleared.", "Done", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    private void forceRefreshProfiles() {
+        int confirm = JOptionPane.showConfirmDialog(
+            this,
+            "Immediately remove stored status for any profile no longer present in the samlsts config?\n" +
+                "This normally happens automatically after a grace period; this forces it now.",
+            "Force Refresh",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+        if (confirm == JOptionPane.YES_OPTION) {
+            int pruned = databaseManager.reconcileProfiles(
+                new HashSet<>(configManager.getAvailableProfiles()), true);
+            logger.info("Force refresh pruned {} stale profile(s) from the database", pruned);
+            JOptionPane.showMessageDialog(this,
+                pruned == 0
+                    ? "No stale profiles found."
+                    : "Removed stored status for " + pruned + " stale profile(s).",
+                "Done",
+                JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
