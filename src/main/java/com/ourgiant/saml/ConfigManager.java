@@ -308,11 +308,13 @@ public class ConfigManager {
     }
 
     /**
-     * Removes a profile section and persists to disk.
+     * Removes a profile section, persists to disk, and drops its token_state row so it
+     * doesn't linger in the database as an orphaned profile (see #101).
      */
     public void deleteProfile(String profileName) throws Exception {
         config.remove(profileName);
         persistConfig();
+        databaseManager.deleteProfileState(profileName);
     }
 
     /**

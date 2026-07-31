@@ -5,11 +5,15 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.sql.*;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Database manager for storing configuration and token state information.
@@ -17,6 +21,9 @@ import java.util.Map;
 public class DatabaseManager {
     private static final Logger logger = LoggerFactory.getLogger(DatabaseManager.class);
     private static final String DB_NAME = "aws_saml.db";
+    // Grace period a profile's token_state row survives after it disappears from samlsts
+    // before reconcileProfiles() prunes it, so a transient/hand-edit doesn't lose history.
+    private static final Duration STALE_PROFILE_TTL = Duration.ofDays(7);
     private Connection connection;
 
     public DatabaseManager() {
@@ -68,6 +75,27 @@ public class DatabaseManager {
 
             // Insert default configuration values
             insertDefaultConfig();
+        }
+
+        addColumnIfMissing("token_state", "missing_since", "TEXT");
+    }
+
+    /**
+     * Adds a column to an existing table if it isn't already there. SQLite has no
+     * "ADD COLUMN IF NOT EXISTS", and this schema predates any migration framework,
+     * so new columns are grafted on at startup this way.
+     */
+    private void addColumnIfMissing(String table, String column, String type) throws SQLException {
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
+                    return;
+                }
+            }
+        }
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
         }
     }
 
@@ -280,6 +308,120 @@ public class DatabaseManager {
             logger.error("Failed to get all expirations", e);
         }
         return expirations;
+    }
+
+    /**
+     * Deletes the token_state row for a single profile immediately. Used when the user
+     * explicitly removes a profile via the UI, so its stale state doesn't linger for
+     * reconcileProfiles()'s grace period.
+     */
+    public void deleteProfileState(String profileName) {
+        if (profileName == null) {
+            return;
+        }
+        String sql = "DELETE FROM token_state WHERE profile_name = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, profileName);
+            pstmt.executeUpdate();
+            logger.debug("Deleted token state for profile {}", profileName);
+        } catch (SQLException e) {
+            logger.error("Failed to delete token state for profile: {}", profileName, e);
+        }
+    }
+
+    /**
+     * Reconciles token_state against the profiles currently defined in samlsts, using the
+     * standard grace period. See {@link #reconcileProfiles(Set, boolean)}.
+     *
+     * @return the number of stale profiles pruned
+     */
+    public int reconcileProfiles(Set<String> currentProfiles) {
+        return reconcileProfiles(currentProfiles, false);
+    }
+
+    /**
+     * A profile whose token_state row exists but is missing from {@code currentProfiles} is
+     * marked with a "missing since" timestamp the first time it's noticed, then pruned once
+     * it's been missing longer than {@link #STALE_PROFILE_TTL} — long enough to tolerate a
+     * transient hand-edit of the samlsts file without losing token history. A profile that
+     * reappears has its marker cleared.
+     *
+     * @param forceImmediate if true, prunes every profile missing from {@code currentProfiles}
+     *                        right now, bypassing the grace period (used by the "Force Refresh"
+     *                        button in the configuration dialog)
+     * @return the number of stale profiles pruned
+     */
+    public int reconcileProfiles(Set<String> currentProfiles, boolean forceImmediate) {
+        List<String[]> rows = new ArrayList<>(); // {profile_name, missing_since}
+        String selectSql = "SELECT profile_name, missing_since FROM token_state";
+        try (PreparedStatement pstmt = connection.prepareStatement(selectSql);
+             ResultSet rs = pstmt.executeQuery()) {
+            while (rs.next()) {
+                rows.add(new String[]{rs.getString("profile_name"), rs.getString("missing_since")});
+            }
+        } catch (SQLException e) {
+            logger.error("Failed to read token_state for reconciliation", e);
+            return 0;
+        }
+
+        int pruned = 0;
+        Instant now = Instant.now();
+        for (String[] row : rows) {
+            String profileName = row[0];
+            String missingSince = row[1];
+
+            if (currentProfiles.contains(profileName)) {
+                if (missingSince != null) {
+                    clearMissingSince(profileName);
+                }
+                continue;
+            }
+
+            if (forceImmediate) {
+                deleteProfileState(profileName);
+                pruned++;
+            } else if (missingSince == null) {
+                markMissingSince(profileName, now);
+            } else if (isStale(missingSince, now)) {
+                deleteProfileState(profileName);
+                pruned++;
+            }
+        }
+
+        if (pruned > 0) {
+            logger.info("Pruned {} stale profile(s) from token_state", pruned);
+        }
+        return pruned;
+    }
+
+    private static boolean isStale(String missingSince, Instant now) {
+        try {
+            return Duration.between(Instant.parse(missingSince), now).compareTo(STALE_PROFILE_TTL) >= 0;
+        } catch (Exception e) {
+            // Unparseable marker shouldn't block pruning forever; treat it as stale.
+            return true;
+        }
+    }
+
+    private void markMissingSince(String profileName, Instant now) {
+        String sql = "UPDATE token_state SET missing_since = ? WHERE profile_name = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, now.toString());
+            pstmt.setString(2, profileName);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("Failed to mark profile as missing: {}", profileName, e);
+        }
+    }
+
+    private void clearMissingSince(String profileName) {
+        String sql = "UPDATE token_state SET missing_since = NULL WHERE profile_name = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, profileName);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("Failed to clear missing marker for profile: {}", profileName, e);
+        }
     }
 
     public void close() {
