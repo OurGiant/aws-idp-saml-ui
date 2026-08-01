@@ -69,9 +69,19 @@ public class DatabaseManager {
             )
             """;
 
+        // Pinned-profile order table. A row's presence means the profile is pinned;
+        // pin_order is its position (0 = top) among pinned profiles.
+        String createPinsTable = """
+            CREATE TABLE IF NOT EXISTS profile_pins (
+                profile_name TEXT PRIMARY KEY,
+                pin_order INTEGER NOT NULL
+            )
+            """;
+
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(createConfigTable);
             stmt.execute(createTokenTable);
+            stmt.execute(createPinsTable);
 
             // Insert default configuration values
             insertDefaultConfig();
@@ -379,11 +389,13 @@ public class DatabaseManager {
 
             if (forceImmediate) {
                 deleteProfileState(profileName);
+                deleteProfilePin(profileName);
                 pruned++;
             } else if (missingSince == null) {
                 markMissingSince(profileName, now);
             } else if (isStale(missingSince, now)) {
                 deleteProfileState(profileName);
+                deleteProfilePin(profileName);
                 pruned++;
             }
         }
@@ -421,6 +433,102 @@ public class DatabaseManager {
             pstmt.executeUpdate();
         } catch (SQLException e) {
             logger.error("Failed to clear missing marker for profile: {}", profileName, e);
+        }
+    }
+
+    // Pinned-profile order methods
+    public boolean isProfilePinned(String profileName) {
+        if (profileName == null) {
+            return false;
+        }
+        String sql = "SELECT 1 FROM profile_pins WHERE profile_name = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, profileName);
+            ResultSet rs = pstmt.executeQuery();
+            return rs.next();
+        } catch (SQLException e) {
+            logger.error("Failed to check pin state for profile: {}", profileName, e);
+            return false;
+        }
+    }
+
+    /**
+     * Pinned profile names in display order (index 0 = top).
+     */
+    public List<String> getPinnedProfilesInOrder() {
+        List<String> result = new ArrayList<>();
+        String sql = "SELECT profile_name FROM profile_pins ORDER BY pin_order ASC";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql);
+             ResultSet rs = pstmt.executeQuery()) {
+            while (rs.next()) {
+                result.add(rs.getString("profile_name"));
+            }
+        } catch (SQLException e) {
+            logger.error("Failed to read pinned profile order", e);
+        }
+        return result;
+    }
+
+    public void setProfilePinned(String profileName, boolean pinned) {
+        if (profileName == null) {
+            return;
+        }
+        List<String> order = new ArrayList<>(getPinnedProfilesInOrder());
+        boolean changed = pinned ? !order.contains(profileName) && order.add(profileName)
+                                  : order.remove(profileName);
+        if (changed) {
+            setPinnedProfilesInOrder(order);
+        }
+    }
+
+    /**
+     * Replaces the entire pinned-profile set and order with the given list (index 0 = top).
+     * Any profile currently pinned but absent from newOrder becomes unpinned. Used both for
+     * a single pin/unpin toggle and for a drag-and-drop reorder, so the pinned set always
+     * comes from one authoritative write rather than incremental inserts/updates.
+     */
+    public void setPinnedProfilesInOrder(List<String> newOrder) {
+        try {
+            connection.setAutoCommit(false);
+            try (Statement del = connection.createStatement()) {
+                del.execute("DELETE FROM profile_pins");
+            }
+            try (PreparedStatement ins = connection.prepareStatement(
+                    "INSERT INTO profile_pins (profile_name, pin_order) VALUES (?, ?)")) {
+                int order = 0;
+                for (String profile : newOrder) {
+                    ins.setString(1, profile);
+                    ins.setInt(2, order++);
+                    ins.executeUpdate();
+                }
+            }
+            connection.commit();
+        } catch (SQLException e) {
+            logger.error("Failed to persist pinned profile order", e);
+            try {
+                connection.rollback();
+            } catch (SQLException rollbackEx) {
+                logger.error("Failed to roll back pinned profile order update", rollbackEx);
+            }
+        } finally {
+            try {
+                connection.setAutoCommit(true);
+            } catch (SQLException e) {
+                logger.error("Failed to restore auto-commit after pinned profile order update", e);
+            }
+        }
+    }
+
+    public void deleteProfilePin(String profileName) {
+        if (profileName == null) {
+            return;
+        }
+        String sql = "DELETE FROM profile_pins WHERE profile_name = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, profileName);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("Failed to delete pin for profile: {}", profileName, e);
         }
     }
 
