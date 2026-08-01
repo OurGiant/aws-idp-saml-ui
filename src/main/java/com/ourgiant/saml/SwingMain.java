@@ -1047,6 +1047,25 @@ public class SwingMain extends JFrame {
     }
 
     /**
+     * Wraps a potentially long message (e.g. several failed profiles' error detail
+     * concatenated together) in a fixed-size scrollable text area, so a verbose message can
+     * never make the dialog itself taller than the screen - the content scrolls instead.
+     */
+    private static JScrollPane scrollableMessage(String text) {
+        JTextArea textArea = new JTextArea(text);
+        textArea.setEditable(false);
+        textArea.setLineWrap(true);
+        textArea.setWrapStyleWord(true);
+        textArea.setCaretPosition(0);
+        textArea.setBackground(UIManager.getColor("OptionPane.background"));
+        textArea.setFont(UIManager.getFont("OptionPane.messageFont"));
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setPreferredSize(new Dimension(500, 300));
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        return scrollPane;
+    }
+
+    /**
      * Shared by refreshExpiringOrExpiredProfiles() and refreshSelectedProfiles() (#127):
      * confirms with the user, then sequentially drives a fresh credential request for every
      * given profile, sharing one SAML login per (samlProvider, username) group (#124). Shares
@@ -1224,7 +1243,7 @@ public class SwingMain extends JFrame {
                         detail.append("\n- ").append(r.profile()).append(": ").append(r.detail());
                     }
                     JOptionPane.showMessageDialog(SwingMain.this,
-                        detail.toString(),
+                        scrollableMessage(detail.toString()),
                         cancelled ? "Batch Refresh Cancelled" : "Batch Refresh Complete With Errors",
                         JOptionPane.WARNING_MESSAGE);
                 }
