@@ -180,17 +180,21 @@ public class SwingMain extends JFrame {
         tokenStatusTable.getColumnModel().getColumn(1).setCellRenderer(new StatusTableCellRenderer(expiringSoonProfiles));
         tokenStatusRowSorter = new TableRowSorter<>(tokenStatusTableModel);
         tokenStatusTable.setRowSorter(tokenStatusRowSorter);
+        // Single source of truth for "which profile is selected to act on": any change to the
+        // table's selected row (mouse click, keyboard arrow navigation, or the context menu's
+        // own setRowSelectionInterval below) syncs the combo box, instead of each interaction
+        // path needing its own manual profileComboBox.setSelectedItem(...) call.
+        tokenStatusTable.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) {
+                return;
+            }
+            int row = tokenStatusTable.getSelectedRow();
+            if (row >= 0) {
+                profileComboBox.setSelectedItem(tokenStatusTable.getValueAt(row, 0));
+            }
+        });
         JPopupMenu tableContextMenu = createTableContextMenu();
         tokenStatusTable.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent e) {
-                int row = tokenStatusTable.rowAtPoint(e.getPoint());
-                if (row >= 0) {
-                    String profile = (String) tokenStatusTableModel.getValueAt(tokenStatusTable.convertRowIndexToModel(row), 0);
-                    profileComboBox.setSelectedItem(profile);
-                }
-            }
-
             @Override
             public void mousePressed(java.awt.event.MouseEvent e) {
                 maybeShowContextMenu(e);
@@ -215,7 +219,6 @@ public class SwingMain extends JFrame {
                 // state (not defined in samlsts) — setSelectedItem silently no-ops for those. Track
                 // the right-clicked profile directly so menu actions always target the right row.
                 contextMenuTargetProfile = profile;
-                profileComboBox.setSelectedItem(profile);
                 tableContextMenu.show(tokenStatusTable, e.getX(), e.getY());
             }
         });
