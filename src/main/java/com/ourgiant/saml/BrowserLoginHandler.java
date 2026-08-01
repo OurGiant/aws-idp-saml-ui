@@ -74,8 +74,26 @@ public class BrowserLoginHandler {
 
         } catch (Exception e) {
             logger.error("Login failed", e);
-            throw new RuntimeException("Login process failed: " + e.getMessage(), e);
+            throw new RuntimeException("Login process failed: " + summarize(e.getMessage()), e);
         }
+    }
+
+    /**
+     * Selenium's own exceptions (TimeoutException in particular) pack a multi-line dump —
+     * build info, full System/Driver info, the entire Capabilities map, session ID — into
+     * getMessage() for debugging purposes. That's exactly what the full exception (preserved
+     * as this RuntimeException's cause, and already logged in full above) is for; the
+     * *message* propagated up to the user-facing error dialog only needs the actual failure
+     * summary, which is everything before that dump begins ("Build info: ..." is a reliable
+     * marker for where it starts, per WebDriverException's own message-building convention).
+     */
+    private static String summarize(String message) {
+        if (message == null) {
+            return "unknown error";
+        }
+        int buildInfoStart = message.indexOf("\nBuild info:");
+        String summary = buildInfoStart >= 0 ? message.substring(0, buildInfoStart) : message;
+        return summary.strip();
     }
 
     /**
