@@ -36,8 +36,9 @@ that touches AWS console/CLI access.
 
 **Security**
 - Okta password storage is encrypted at rest with a configurable expiration, never stored in plain text
-- SQLite database and config files are locked to owner-only permissions on disk
+- The credentials file and local database are locked to owner-only permissions on disk
 - SAML/XML parsing is hardened against XXE injection; AWS role-selection lookups are hardened against XPath injection
+- See [Security](#security) below for the reasoning behind these choices and what's deliberately out of scope
 
 **Distribution**
 - Native installers published on every tagged release: a Windows zip (jpackage app image), a macOS `.dmg` (Intel and Apple Silicon), and a Linux `.deb`
@@ -114,6 +115,77 @@ The Credentials dialog can export the active session's AWS credentials as an
 encrypted, hybrid AES/RSA-encoded string suitable for pasting into another
 tool's input (for example, an automated deployment script) without exposing
 the raw access key, secret key, or session token.
+
+## Security
+
+This app handles two categories of sensitive data — the Okta password (if
+you opt into storing it) and temporary AWS credentials/SAML tokens — so this
+section documents the reasoning behind how each is stored and handled, not
+just what the code does.
+
+**Okta password at rest** (`PasswordManager`): encrypted with AES-256-GCM, a
+random 96-bit IV per encryption, before being written to the local SQLite
+database. GCM was chosen over a non-authenticated mode (e.g. CBC) so that a
+tampered ciphertext fails to decrypt instead of silently producing garbage.
+Storage is opt-in and time-boxed: the configurable expiration means a
+compromised or stale ciphertext has a bounded useful lifetime rather than
+living forever. The encryption key itself is generated once and stored in
+the same database it protects — this is a deliberate, bounded tradeoff, not
+an oversight: it defends against the database file being read out of
+context (a backup, a copy handed to someone else, a different OS user
+account on a shared machine subject to the file permissions below), but
+**not** against an attacker who already has this OS user's own access,
+since the key sits right next to what it encrypts. There's no OS
+keychain/TPM-backed key storage or passphrase-derived key — introducing one
+would need to justify the added complexity (key rotation, recovery when a
+passphrase is forgotten) against a threat model where the primary asset at
+risk is a short-lived IdP password, not the AWS credentials themselves.
+
+**File permissions** (`FilePermissions`): `~/.aws/credentials` and the local
+`~/.aws/aws_saml.db` database are restricted to owner-only access
+(`rw-------` / POSIX mode 0600 where supported, an equivalent
+readable/writable-only-by-owner ACL elsewhere), mirroring how the AWS CLI
+itself treats `~/.aws/credentials`. `~/.aws/samlsts` (IdP URLs, account IDs,
+role ARNs — no secrets) is intentionally left at the OS default, since it
+holds no credential material worth locking down further.
+
+**Cross-tool credential export** (`CredentialsDialog`): exporting the active
+session for another tool encrypts it with a hybrid scheme — a fresh,
+per-export random AES-256 key (CBC/PKCS5Padding) encrypts the credentials,
+and that one-time AES key is itself wrapped with RSA-OAEP (SHA-256, MGF1-SHA256)
+under a recipient public key read from `~/.aws/public_key.pem`. This exact
+algorithm/mode/padding combination is pinned deliberately, not just "some
+AES/RSA scheme": it's byte-for-byte compatible with the sibling Python
+tooling (the Python desktop app and `python-aws-deployer`) that decrypts the
+same export format on the other end. Because of that, **any change to this
+encode/decode path is a cross-repo change** — it must ship in lockstep
+across all three implementations, or exports produced by one become
+unreadable by the others.
+
+**SAML/XML parsing** (`SamlParser`): the SAML response arrives over the
+network from the IdP and is treated as untrusted input accordingly. DOCTYPE
+declarations are rejected outright and external general/parameter entity
+resolution is disabled before any parsing happens — legitimate SAML
+responses never contain a DOCTYPE, so disallowing it entirely closes off XXE
+(XML external entity) injection with no legitimate-use tradeoff.
+
+**AWS role-selection lookups** (`BrowserLoginHandler`): the AWS account
+number and IAM role name are attacker-influenceable (they come from the
+SAML assertion) and were previously interpolated directly into an XPath
+expression used to locate the matching role element in the browser DOM,
+allowing a crafted assertion to break out of the intended query. XPath 1.0
+has no native string-escaping mechanism, so values are instead built into
+safe XPath string literals (`toXPathLiteral`, splitting on embedded quote
+characters and concatenating them back together) before being placed into
+the query.
+
+**Explicitly out of scope**: this app doesn't attempt to defend against a
+compromise of the local OS user account it runs as — file permissions and
+the encryption above raise the bar against *other* accounts, processes, or
+copies of these files, not against an attacker already inside this session.
+Temporary AWS credentials and SAML tokens are time-bound by AWS STS/the IdP
+itself; this app doesn't add its own independent revocation or shortening
+of those lifetimes.
 
 ## Dependencies
 
