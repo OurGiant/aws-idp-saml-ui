@@ -12,11 +12,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DatabaseManagerTest {
 
@@ -139,5 +142,48 @@ class DatabaseManagerTest {
         databaseManager.updateExpiration("foo", Instant.now().plusSeconds(3600));
         databaseManager.reconcileProfiles(Set.of(), false);
         assertNotNull(readMissingSince("foo"));
+    }
+
+    @Test
+    void setProfilePinned_pinsAndUnpinsProfile() {
+        assertFalse(databaseManager.isProfilePinned("foo"));
+
+        databaseManager.setProfilePinned("foo", true);
+        assertTrue(databaseManager.isProfilePinned("foo"));
+        assertEquals(List.of("foo"), databaseManager.getPinnedProfilesInOrder());
+
+        databaseManager.setProfilePinned("foo", false);
+        assertFalse(databaseManager.isProfilePinned("foo"));
+        assertEquals(List.of(), databaseManager.getPinnedProfilesInOrder());
+    }
+
+    @Test
+    void setProfilePinned_appendsNewPinsAtEnd() {
+        databaseManager.setProfilePinned("a", true);
+        databaseManager.setProfilePinned("b", true);
+
+        assertEquals(List.of("a", "b"), databaseManager.getPinnedProfilesInOrder());
+    }
+
+    @Test
+    void setPinnedProfilesInOrder_replacesEntirePinnedSet() {
+        databaseManager.setProfilePinned("a", true);
+        databaseManager.setProfilePinned("b", true);
+        databaseManager.setProfilePinned("c", true);
+
+        databaseManager.setPinnedProfilesInOrder(List.of("c", "a"));
+
+        assertEquals(List.of("c", "a"), databaseManager.getPinnedProfilesInOrder());
+        assertFalse(databaseManager.isProfilePinned("b"), "b was omitted from the replacement order, so it should be unpinned");
+    }
+
+    @Test
+    void reconcileProfiles_forceImmediate_alsoPrunesPins() {
+        databaseManager.updateExpiration("stale", Instant.now().plusSeconds(3600));
+        databaseManager.setProfilePinned("stale", true);
+
+        databaseManager.reconcileProfiles(Set.of(), true);
+
+        assertFalse(databaseManager.isProfilePinned("stale"));
     }
 }

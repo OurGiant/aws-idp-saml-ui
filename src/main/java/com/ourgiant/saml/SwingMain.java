@@ -11,6 +11,9 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.InputEvent;
@@ -70,6 +73,7 @@ public class SwingMain extends JFrame {
     private TrayIcon trayIcon;
     private final Map<String, Instant> lastNotifiedExpiration = new HashMap<>();
     private final Set<String> expiringSoonProfiles = new HashSet<>();
+    private final List<String> pinnedProfileOrder = new ArrayList<>();
 
     private ConfigManager configManager;
     private CredentialManager credentialManager;
@@ -176,8 +180,9 @@ public class SwingMain extends JFrame {
         tokenStatusTable = new JTable(tokenStatusTableModel);
         tokenStatusTable.setFillsViewportHeight(true);
         tokenStatusTable.setRowHeight(26);
-        tokenStatusTable.setToolTipText("Click a row to select that profile above, or right-click for actions. Click a column header to sort.");
-        tokenStatusTable.getColumnModel().getColumn(1).setCellRenderer(new StatusTableCellRenderer(expiringSoonProfiles));
+        tokenStatusTable.setToolTipText("Click a row to select that profile above, drag a row to pin/reorder favorites, "
+            + "or right-click for actions. Click a column header to sort.");
+        tokenStatusTable.setDefaultRenderer(Object.class, new StatusTableCellRenderer(expiringSoonProfiles, pinnedProfileOrder));
         tokenStatusRowSorter = new TableRowSorter<>(tokenStatusTableModel);
         tokenStatusTable.setRowSorter(tokenStatusRowSorter);
         // Single source of truth for "which profile is selected to act on": any change to the
@@ -193,6 +198,9 @@ public class SwingMain extends JFrame {
                 profileComboBox.setSelectedItem(tokenStatusTable.getValueAt(row, 0));
             }
         });
+        tokenStatusTable.setDragEnabled(true);
+        tokenStatusTable.setDropMode(DropMode.INSERT_ROWS);
+        tokenStatusTable.setTransferHandler(new ProfileRowTransferHandler());
         JPopupMenu tableContextMenu = createTableContextMenu();
         tokenStatusTable.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
@@ -673,6 +681,8 @@ public class SwingMain extends JFrame {
         try {
             tokenStatusTableModel.setRowCount(0);
             expiringSoonProfiles.clear();
+            pinnedProfileOrder.clear();
+            pinnedProfileOrder.addAll(databaseManager.getPinnedProfilesInOrder());
             List<String> availableProfiles = configManager.getAvailableProfiles();
             databaseManager.reconcileProfiles(new HashSet<>(availableProfiles));
 
@@ -712,8 +722,16 @@ public class SwingMain extends JFrame {
                 rows.add(new TokenStatusRow(profile, status, expiresAtText, timeRemaining));
             }
 
-            // Simplified sorting
+            // Pinned profiles sort to the top in their persisted order; everything else falls
+            // back to the existing status-then-name ordering.
             rows.sort((a, b) -> {
+                int rankA = pinnedProfileOrder.indexOf(a.getProfile());
+                int rankB = pinnedProfileOrder.indexOf(b.getProfile());
+                if (rankA >= 0 || rankB >= 0) {
+                    if (rankA < 0) return 1;
+                    if (rankB < 0) return -1;
+                    return rankA - rankB;
+                }
                 int statusOrder = getStatusOrder(a.getStatus()) - getStatusOrder(b.getStatus());
                 if (statusOrder != 0) return statusOrder;
                 return a.getProfile().compareTo(b.getProfile());
@@ -802,6 +820,20 @@ public class SwingMain extends JFrame {
         try {
             List<String> profiles = configManager.getAvailableProfiles();
             String lastUsedProfile = databaseManager.getLastUsedProfile();
+
+            // Pinned profiles surface first, same ordering as the status table.
+            List<String> orderedProfiles = new ArrayList<>();
+            for (String pinned : databaseManager.getPinnedProfilesInOrder()) {
+                if (profiles.contains(pinned)) {
+                    orderedProfiles.add(pinned);
+                }
+            }
+            for (String profile : profiles) {
+                if (!orderedProfiles.contains(profile)) {
+                    orderedProfiles.add(profile);
+                }
+            }
+            profiles = orderedProfiles;
 
             // JComboBox auto-selects the first added item, firing the selection listener
             // before the real last-used profile can be restored below; suppress persistence
@@ -1115,15 +1147,24 @@ public class SwingMain extends JFrame {
 
     private static class StatusTableCellRenderer extends DefaultTableCellRenderer {
         private final Set<String> expiringSoonProfiles;
+        private final List<String> pinnedProfiles;
 
-        StatusTableCellRenderer(Set<String> expiringSoonProfiles) {
+        StatusTableCellRenderer(Set<String> expiringSoonProfiles, List<String> pinnedProfiles) {
             this.expiringSoonProfiles = expiringSoonProfiles;
+            this.pinnedProfiles = pinnedProfiles;
         }
 
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
                                                        boolean hasFocus, int row, int column) {
             Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+            // Registered as the table's default renderer (all columns), so bold-face the whole
+            // pinned row rather than just the status column.
+            String rowProfile = (String) table.getValueAt(row, 0);
+            component.setFont(component.getFont().deriveFont(
+                pinnedProfiles.contains(rowProfile) ? Font.BOLD : Font.PLAIN));
+
             if (column == 1 && value instanceof String status) {
                 switch (status) {
                     case "VALID" -> {
@@ -1174,6 +1215,85 @@ public class SwingMain extends JFrame {
         }
     }
 
+    /**
+     * Drag-and-drop row reordering for the status table. Dragging a row onto another row
+     * pins the dragged profile (if not already pinned) at that position, or moves it there
+     * if it's already pinned — reordering always targets the pinned block specifically, since
+     * unpinned rows fall back to the status/name ordering refreshStatusTable() already applies.
+     */
+    private class ProfileRowTransferHandler extends TransferHandler {
+        @Override
+        public int getSourceActions(JComponent c) {
+            return MOVE;
+        }
+
+        @Override
+        protected Transferable createTransferable(JComponent c) {
+            int viewRow = tokenStatusTable.getSelectedRow();
+            if (viewRow < 0) {
+                return null;
+            }
+            return new StringSelection((String) tokenStatusTable.getValueAt(viewRow, 0));
+        }
+
+        @Override
+        public boolean canImport(TransferSupport support) {
+            // Reordering is relative to what's visually above/below the drop point, which is
+            // only well-defined against the pinned-first/status/name ordering this table
+            // normally uses — decline while a column-header sort overrides that ordering.
+            return support.isDrop()
+                && support.isDataFlavorSupported(DataFlavor.stringFlavor)
+                && tokenStatusRowSorter.getSortKeys().isEmpty();
+        }
+
+        @Override
+        public boolean importData(TransferSupport support) {
+            if (!canImport(support)) {
+                return false;
+            }
+            try {
+                String draggedProfile = (String) support.getTransferable().getTransferData(DataFlavor.stringFlavor);
+                int targetViewRow = ((JTable.DropLocation) support.getDropLocation()).getRow();
+                reorderPinnedProfile(draggedProfile, targetViewRow);
+                return true;
+            } catch (Exception ex) {
+                logger.warn("Failed to reorder pinned profile via drag-and-drop", ex);
+                return false;
+            }
+        }
+    }
+
+    private void reorderPinnedProfile(String profile, int targetViewRow) {
+        List<String> pinned = new ArrayList<>(databaseManager.getPinnedProfilesInOrder());
+        pinned.remove(profile);
+
+        int insertIndex;
+        if (targetViewRow < 0 || targetViewRow >= tokenStatusTable.getRowCount()) {
+            insertIndex = pinned.size();
+        } else {
+            String targetProfile = (String) tokenStatusTable.getValueAt(targetViewRow, 0);
+            int existingIndex = pinned.indexOf(targetProfile);
+            insertIndex = (existingIndex >= 0) ? existingIndex : pinned.size();
+        }
+
+        pinned.add(insertIndex, profile);
+        databaseManager.setPinnedProfilesInOrder(pinned);
+        statusLabel.setText("Pinned \"" + profile + "\" at position " + (insertIndex + 1) + ".");
+        refreshStatusTable();
+        loadProfiles();
+    }
+
+    private void toggleProfilePinned(String profileName) {
+        if (profileName == null) {
+            return;
+        }
+        boolean pinned = databaseManager.isProfilePinned(profileName);
+        databaseManager.setProfilePinned(profileName, !pinned);
+        statusLabel.setText((!pinned ? "Pinned \"" : "Unpinned \"") + profileName + "\".");
+        refreshStatusTable();
+        loadProfiles();
+    }
+
     private JPopupMenu createTableContextMenu() {
         JPopupMenu menu = new JPopupMenu();
 
@@ -1195,6 +1315,12 @@ public class SwingMain extends JFrame {
 
         menu.addSeparator();
 
+        JMenuItem pinItem = new JMenuItem("Pin Profile");
+        pinItem.addActionListener(e -> toggleProfilePinned(contextMenuTargetProfile));
+        menu.add(pinItem);
+
+        menu.addSeparator();
+
         JMenuItem deleteItem = new JMenuItem("Delete Profile...");
         deleteItem.addActionListener(e -> deleteProfileFromContextMenu(contextMenuTargetProfile));
         menu.add(deleteItem);
@@ -1211,6 +1337,9 @@ public class SwingMain extends JFrame {
                 showItem.setEnabled(hasCredentials);
                 showEncryptedItem.setEnabled(hasCredentials && hasPublicKey);
                 openConsoleItem.setEnabled(hasCredentials);
+                pinItem.setText(profile != null && databaseManager.isProfilePinned(profile)
+                    ? "Unpin Profile" : "Pin Profile");
+                pinItem.setEnabled(profile != null);
                 deleteItem.setEnabled(profile != null);
             }
 
