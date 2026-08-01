@@ -48,6 +48,7 @@ public class SwingMain extends JFrame {
     private JButton showEncryptedButton;
     private JButton showCredentialsButton;
     private JButton openConsoleButton;
+    private JButton batchRefreshButton;
 
     private DefaultTableModel tokenStatusTableModel;
     private JTable tokenStatusTable;
@@ -257,6 +258,13 @@ public class SwingMain extends JFrame {
         refreshStatusButton.addActionListener(e -> refreshStatusTable());
         refreshStatusButton.setToolTipText("Recheck credential expiration status for all profiles");
         statusControls.add(refreshStatusButton);
+
+        batchRefreshButton = new JButton("Refresh Expiring/Expired");
+        batchRefreshButton.setMnemonic(KeyEvent.VK_E);
+        batchRefreshButton.addActionListener(new BatchRefreshListener());
+        batchRefreshButton.setToolTipText("Renew credentials (via browser login) for every profile that's "
+            + "expired or within " + formatDuration(EXPIRY_WARNING_THRESHOLD) + " of expiring");
+        statusControls.add(batchRefreshButton);
         lastRefreshedLabel = new JLabel();
         statusControls.add(lastRefreshedLabel);
         tokenStatusPanel.add(statusControls, BorderLayout.SOUTH);
@@ -856,6 +864,7 @@ public class SwingMain extends JFrame {
         // Swap the button to a Cancel affordance during processing
         requestCredentialsButton.setText("Cancel");
         requestCredentialsButton.setToolTipText("Cancel the in-progress credential request");
+        batchRefreshButton.setEnabled(false);
         credentialRequestInProgress = true;
         credentialRequestCancelledByUser = false;
         loginProgressBar.setVisible(true);
@@ -881,6 +890,7 @@ public class SwingMain extends JFrame {
             protected void done() {
                 requestCredentialsButton.setText("Request Credentials");
                 requestCredentialsButton.setToolTipText("Launch browser login and fetch AWS credentials for the selected profile");
+                batchRefreshButton.setEnabled(true);
                 credentialRequestInProgress = false;
                 loginProgressBar.setVisible(false);
                 activeAuthenticator = null;
@@ -915,6 +925,165 @@ public class SwingMain extends JFrame {
         if (activeAuthenticator != null) {
             activeAuthenticator.cancel();
         }
+    }
+
+    private class BatchRefreshListener implements ActionListener {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            if (credentialRequestInProgress) {
+                cancelCredentialRequest();
+            } else {
+                refreshExpiringOrExpiredProfiles();
+            }
+        }
+    }
+
+    private record BatchRefreshResult(String profile, boolean success, String detail) {
+    }
+
+    /**
+     * Sequentially drives a fresh credential request for every profile currently EXPIRED or
+     * within EXPIRY_WARNING_THRESHOLD of expiring, so a user managing many profiles doesn't have
+     * to repeat "select profile, click Request Credentials, wait" once per stale profile. Shares
+     * credentialRequestInProgress/activeAuthenticator/credentialRequestCancelledByUser with the
+     * single-profile flow (requestCredentialsForProfile/cancelCredentialRequest) so the two can't
+     * run concurrently and Cancel works the same way for both.
+     */
+    private void refreshExpiringOrExpiredProfiles() {
+        if (credentialRequestInProgress) {
+            JOptionPane.showMessageDialog(SwingMain.this,
+                "A credential request is already in progress. Cancel it first or wait for it to finish.",
+                "Request In Progress",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        List<String> targets = new ArrayList<>();
+        for (int row = 0; row < tokenStatusTableModel.getRowCount(); row++) {
+            String profile = (String) tokenStatusTableModel.getValueAt(row, 0);
+            String status = (String) tokenStatusTableModel.getValueAt(row, 1);
+            if ("EXPIRED".equals(status) || expiringSoonProfiles.contains(profile)) {
+                targets.add(profile);
+            }
+        }
+
+        if (targets.isEmpty()) {
+            JOptionPane.showMessageDialog(SwingMain.this,
+                "No profiles are currently expired or expiring soon.",
+                "Nothing To Refresh",
+                JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        batchRefreshButton.setText("Cancel");
+        batchRefreshButton.setToolTipText("Cancel the in-progress batch refresh");
+        requestCredentialsButton.setEnabled(false);
+        credentialRequestInProgress = true;
+        credentialRequestCancelledByUser = false;
+        loginProgressBar.setVisible(true);
+        statusLabel.setText("Starting batch refresh for " + targets.size() + " profile(s)...");
+
+        SwingWorker<List<BatchRefreshResult>, String> worker = new SwingWorker<>() {
+            @Override
+            protected List<BatchRefreshResult> doInBackground() {
+                List<BatchRefreshResult> results = new ArrayList<>();
+                for (int i = 0; i < targets.size(); i++) {
+                    if (credentialRequestCancelledByUser) {
+                        break;
+                    }
+                    String profile = targets.get(i);
+                    String progressPrefix = "Refreshing " + (i + 1) + " of " + targets.size() + " (" + profile + "): ";
+                    publish(progressPrefix + "starting...");
+
+                    SamlAuthenticator authenticator = new SamlAuthenticator();
+                    activeAuthenticator = authenticator;
+                    try {
+                        authenticator.requestCredentials(
+                            profile,
+                            databaseManager.getFastPassEnabled(),
+                            showBrowserCheckBox.isSelected(),
+                            msg -> publish(progressPrefix + msg)
+                        );
+                        results.add(new BatchRefreshResult(profile, true, null));
+                    } catch (Exception ex) {
+                        if (credentialRequestCancelledByUser) {
+                            // Cancelled mid-flight: don't report the interrupted profile as a failure.
+                            break;
+                        }
+                        CredentialRequestError error = CredentialRequestError.classify(ex);
+                        results.add(new BatchRefreshResult(profile, false, error.statusMessage()));
+                    } finally {
+                        activeAuthenticator = null;
+                    }
+                }
+                return results;
+            }
+
+            @Override
+            protected void process(List<String> chunks) {
+                if (!chunks.isEmpty()) {
+                    statusLabel.setText(chunks.get(chunks.size() - 1));
+                }
+            }
+
+            @Override
+            protected void done() {
+                batchRefreshButton.setText("Refresh Expiring/Expired");
+                batchRefreshButton.setToolTipText("Renew credentials (via browser login) for every profile that's "
+                    + "expired or within " + formatDuration(EXPIRY_WARNING_THRESHOLD) + " of expiring");
+                requestCredentialsButton.setEnabled(true);
+                credentialRequestInProgress = false;
+                loginProgressBar.setVisible(false);
+                activeAuthenticator = null;
+
+                List<BatchRefreshResult> results;
+                try {
+                    results = get();
+                } catch (Exception ex) {
+                    statusLabel.setText("Batch refresh failed: " + ex.getMessage());
+                    return;
+                }
+
+                refreshStatusTable();
+                updateCredentialButtons();
+
+                long succeeded = results.stream().filter(BatchRefreshResult::success).count();
+                List<BatchRefreshResult> failures = results.stream().filter(r -> !r.success()).toList();
+                boolean cancelled = credentialRequestCancelledByUser;
+                int notAttempted = targets.size() - results.size();
+
+                if (cancelled) {
+                    statusLabel.setText(String.format(
+                        "Batch refresh cancelled: %d succeeded, %d failed, %d not attempted.",
+                        succeeded, failures.size(), notAttempted));
+                } else {
+                    statusLabel.setText(String.format(
+                        "Batch refresh complete: %d succeeded, %d failed.", succeeded, failures.size()));
+                }
+
+                if (failures.isEmpty() && !cancelled) {
+                    JOptionPane.showMessageDialog(SwingMain.this,
+                        "Refreshed " + succeeded + " profile(s) successfully.",
+                        "Batch Refresh Complete",
+                        JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    StringBuilder detail = new StringBuilder();
+                    detail.append(succeeded).append(" succeeded, ").append(failures.size()).append(" failed");
+                    if (cancelled) {
+                        detail.append(", ").append(notAttempted).append(" not attempted (cancelled)");
+                    }
+                    detail.append(".\n");
+                    for (BatchRefreshResult r : failures) {
+                        detail.append("\n- ").append(r.profile()).append(": ").append(r.detail());
+                    }
+                    JOptionPane.showMessageDialog(SwingMain.this,
+                        detail.toString(),
+                        cancelled ? "Batch Refresh Cancelled" : "Batch Refresh Complete With Errors",
+                        JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        };
+        worker.execute();
     }
 
     private void showCredentialErrorDialog(String selectedProfile, CredentialRequestError error) {
