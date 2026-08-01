@@ -34,7 +34,14 @@ public class BrowserLoginHandler {
                                 boolean showBrowser, String accountNumber, String iamRole,
                                 Consumer<String> statusCallback, BooleanSupplier cancelled) {
         this.driver = driver;
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(30));
+        // 30s was too tight for a slow/cold first navigation against at least one real-world
+        // corporate IdP (#132): a login attempt timed out waiting for the login page's title,
+        // then the very next attempt against the identical URL reached the next step in ~4s.
+        // This is the wait behind the critical-path title/element checks in
+        // performLogin()/handleOktaLogin()/waitForSamlResponse() - the various short "probe"
+        // waits elsewhere in this class (3s/5s/10s, used to detect *optional* page states) are
+        // deliberately short by design and untouched here.
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(60));
         this.useOktaFastPass = useOktaFastPass;
         this.passwordManager = passwordManager;
         this.showBrowser = showBrowser;
