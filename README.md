@@ -179,6 +179,18 @@ safe XPath string literals (`toXPathLiteral`, splitting on embedded quote
 characters and concatenating them back together) before being placed into
 the query.
 
+**Login-failure diagnostics** (`BrowserLoginHandler`): when a browser login
+step fails, the app logs the page's URL/title and saves a screenshot to
+`~/.aws/login-failure-screenshots/` — the same capture-on-failure technique
+the sibling Python app's `ScreenshotRecorder` uses — so a failure caused by
+an unexpected page (a device-trust check, a bot-check, an IdP redirect hop)
+is something a user or support engineer can actually look at rather than
+inferring blind from a timeout message. This only fires on an actual
+failure, not routinely, and a corporate SSO page can itself contain
+identifying information (company branding, the logged-in username) worth
+being aware of — saved screenshots get the same owner-only file permissions
+as the credentials file.
+
 **Explicitly out of scope**: this app doesn't attempt to defend against a
 compromise of the local OS user account it runs as — file permissions and
 the encryption above raise the bar against *other* accounts, processes, or
