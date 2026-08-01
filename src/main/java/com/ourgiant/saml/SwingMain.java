@@ -284,15 +284,27 @@ public class SwingMain extends JFrame {
 
         add(centerPanel, BorderLayout.CENTER);
 
-        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // BorderLayout, not FlowLayout: a long status message (batch/grouped-login progress
+        // text in particular, e.g. "Logging in once for N profiles sharing ...'s identity
+        // provider: ...") must never be able to wrap the progress bar/cancel button onto a
+        // second row FlowLayout would've had to invent — the fixed-size window (see
+        // setMinimumSize below) never grows to show that second row, silently pushing the
+        // cancel button out of visibility while a batch is actually running. Anchoring the
+        // progress bar/cancel button to EAST keeps them always visible; the CENTER label just
+        // clips instead, with the full text available via tooltip (see the propertyChange
+        // listener below) rather than needing every statusLabel.setText(...) call site updated.
+        JPanel statusPanel = new JPanel(new BorderLayout(8, 0));
         statusPanel.setBorder(BorderFactory.createLoweredBevelBorder());
         statusLabel = new JLabel("Ready");
-        statusPanel.add(statusLabel);
+        statusLabel.addPropertyChangeListener("text", e -> statusLabel.setToolTipText((String) e.getNewValue()));
+        statusPanel.add(statusLabel, BorderLayout.CENTER);
+
+        JPanel statusEastPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         loginProgressBar = new JProgressBar();
         loginProgressBar.setPreferredSize(new Dimension(120, 16));
         loginProgressBar.setIndeterminate(true);
         loginProgressBar.setVisible(false);
-        statusPanel.add(loginProgressBar);
+        statusEastPanel.add(loginProgressBar);
         // Only shown while a batch refresh is actually running (see
         // refreshExpiringOrExpiredProfiles()), so cancelling stays a single visible click away
         // in the moment it matters without giving the batch action a permanent seat on the
@@ -300,7 +312,9 @@ public class SwingMain extends JFrame {
         batchCancelButton = new JButton("Cancel Batch Refresh");
         batchCancelButton.addActionListener(e -> cancelCredentialRequest());
         batchCancelButton.setVisible(false);
-        statusPanel.add(batchCancelButton);
+        statusEastPanel.add(batchCancelButton);
+        statusPanel.add(statusEastPanel, BorderLayout.EAST);
+
         add(statusPanel, BorderLayout.SOUTH);
 
         pack();

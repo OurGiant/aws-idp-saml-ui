@@ -7,7 +7,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CancellationException;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -81,7 +87,51 @@ public class BrowserLoginHandler {
 
         } catch (Exception e) {
             logger.error("Login failed", e);
+            logPageStateOnFailure();
             throw new RuntimeException("Login process failed: " + summarize(e.getMessage()), e);
+        }
+    }
+
+    /**
+     * Captures the page Selenium was actually looking at when a login step failed, so a
+     * timeout can be diagnosed as "page loaded but the expected condition never matched"
+     * (wrong page — an unexpected redirect hop, device-trust check, bot-check on a fresh
+     * headless fingerprint, etc.) versus "the right page just loaded slowly" instead of
+     * guessing (#134). Best-effort: driver state can itself be unusable after some failures
+     * (a crashed browser, a closed window), so this must never throw past a log warning.
+     */
+    private void logPageStateOnFailure() {
+        try {
+            logger.error("Page state at failure — URL: {}, Title: {}", driver.getCurrentUrl(), driver.getTitle());
+        } catch (Exception e) {
+            logger.warn("Could not capture page state after login failure", e);
+        }
+        captureFailureScreenshot();
+    }
+
+    /**
+     * Best-effort screenshot of the page Selenium was looking at when a login step failed —
+     * the same technique (capture-on-failure, never block/throw past a log warning) the
+     * sibling Python app's ScreenshotRecorder uses. A URL/title alone can't show a device-trust
+     * check, bot-check, or other unexpected page a user can only make sense of by looking at
+     * it. Works fine headless: Selenium's screenshot goes through the browser's own rendering
+     * via CDP, not the host display server (unlike java.awt.Robot elsewhere in this app).
+     */
+    private void captureFailureScreenshot() {
+        if (!(driver instanceof TakesScreenshot)) {
+            return;
+        }
+        try {
+            Path dir = Paths.get(System.getProperty("user.home"), ".aws", "login-failure-screenshots");
+            Files.createDirectories(dir);
+            String filename = "login-failure-" + DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").format(LocalDateTime.now()) + ".png";
+            Path target = dir.resolve(filename);
+            File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+            Files.copy(screenshot.toPath(), target);
+            FilePermissions.restrictToOwner(target);
+            logger.error("Saved failure screenshot: {}", target);
+        } catch (Exception e) {
+            logger.warn("Could not capture failure screenshot", e);
         }
     }
 
