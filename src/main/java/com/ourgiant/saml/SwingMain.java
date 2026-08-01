@@ -55,6 +55,7 @@ public class SwingMain extends JFrame {
     private JButton showCredentialsButton;
     private JButton openConsoleButton;
     private JMenuItem batchRefreshMenuItem;
+    private JMenuItem refreshSelectedMenuItem;
     private JButton batchCancelButton;
 
     private DefaultTableModel tokenStatusTableModel;
@@ -194,6 +195,7 @@ public class SwingMain extends JFrame {
         // own setRowSelectionInterval below) syncs the combo box, instead of each interaction
         // path needing its own manual profileComboBox.setSelectedItem(...) call.
         tokenStatusTable.getSelectionModel().addListSelectionListener(e -> {
+            updateRefreshSelectedMenuItemEnabled();
             if (e.getValueIsAdjusting()) {
                 return;
             }
@@ -349,6 +351,14 @@ public class SwingMain extends JFrame {
         batchRefreshMenuItem.setToolTipText("Renew credentials (via browser login) for every profile that's "
             + "expired or within " + formatDuration(EXPIRY_WARNING_THRESHOLD) + " of expiring");
         actionsMenu.add(batchRefreshMenuItem);
+
+        refreshSelectedMenuItem = new JMenuItem("Refresh Selected Profiles...");
+        refreshSelectedMenuItem.setMnemonic(KeyEvent.VK_S);
+        refreshSelectedMenuItem.addActionListener(e -> refreshSelectedProfiles());
+        refreshSelectedMenuItem.setToolTipText("Renew credentials (via browser login) for the profile(s) "
+            + "currently selected in the status table, regardless of their current status");
+        refreshSelectedMenuItem.setEnabled(false); // Nothing selected yet; kept in sync by the table's selection listener.
+        actionsMenu.add(refreshSelectedMenuItem);
 
         menuBar.add(actionsMenu);
 
@@ -918,6 +928,7 @@ public class SwingMain extends JFrame {
         requestCredentialsButton.setText("Cancel");
         requestCredentialsButton.setToolTipText("Cancel the in-progress credential request");
         batchRefreshMenuItem.setEnabled(false);
+        refreshSelectedMenuItem.setEnabled(false);
         credentialRequestInProgress = true;
         credentialRequestCancelledByUser = false;
         loginProgressBar.setVisible(true);
@@ -944,6 +955,7 @@ public class SwingMain extends JFrame {
                 requestCredentialsButton.setText("Request Credentials");
                 requestCredentialsButton.setToolTipText("Launch browser login and fetch AWS credentials for the selected profile");
                 batchRefreshMenuItem.setEnabled(true);
+                updateRefreshSelectedMenuItemEnabled();
                 credentialRequestInProgress = false;
                 loginProgressBar.setVisible(false);
                 activeAuthenticator = null;
@@ -998,23 +1010,16 @@ public class SwingMain extends JFrame {
         return new ArrayList<>(byIdentity.values());
     }
 
+    private void updateRefreshSelectedMenuItemEnabled() {
+        refreshSelectedMenuItem.setEnabled(!credentialRequestInProgress && tokenStatusTable.getSelectedRowCount() > 0);
+    }
+
     /**
-     * Sequentially drives a fresh credential request for every profile currently EXPIRED or
-     * within EXPIRY_WARNING_THRESHOLD of expiring, so a user managing many profiles doesn't have
-     * to repeat "select profile, click Request Credentials, wait" once per stale profile. Shares
-     * credentialRequestInProgress/activeAuthenticator/credentialRequestCancelledByUser with the
-     * single-profile flow (requestCredentialsForProfile/cancelCredentialRequest) so the two can't
-     * run concurrently and Cancel works the same way for both.
+     * Refreshes every profile currently EXPIRED or within EXPIRY_WARNING_THRESHOLD of expiring,
+     * so a user managing many profiles doesn't have to repeat "select profile, click Request
+     * Credentials, wait" once per stale profile.
      */
     private void refreshExpiringOrExpiredProfiles() {
-        if (credentialRequestInProgress) {
-            JOptionPane.showMessageDialog(SwingMain.this,
-                "A credential request is already in progress. Cancel it first or wait for it to finish.",
-                "Request In Progress",
-                JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
         List<String> targets = new ArrayList<>();
         for (int row = 0; row < tokenStatusTableModel.getRowCount(); row++) {
             String profile = (String) tokenStatusTableModel.getValueAt(row, 0);
@@ -1023,10 +1028,44 @@ public class SwingMain extends JFrame {
                 targets.add(profile);
             }
         }
+        runBatchRefresh(targets, "Refresh Expiring/Expired Profiles",
+            "No profiles are currently expired or expiring soon.");
+    }
+
+    /**
+     * Refreshes exactly the profile(s) currently selected in the status table, regardless of
+     * their current status (#127) — e.g. proactively refreshing a still-valid profile before a
+     * work session is a legitimate reason to select it, not just expired/expiring ones.
+     */
+    private void refreshSelectedProfiles() {
+        List<String> targets = new ArrayList<>();
+        for (int row : tokenStatusTable.getSelectedRows()) {
+            targets.add((String) tokenStatusTable.getValueAt(row, 0));
+        }
+        runBatchRefresh(targets, "Refresh Selected Profiles",
+            "No profiles are selected in the status table.");
+    }
+
+    /**
+     * Shared by refreshExpiringOrExpiredProfiles() and refreshSelectedProfiles() (#127):
+     * confirms with the user, then sequentially drives a fresh credential request for every
+     * given profile, sharing one SAML login per (samlProvider, username) group (#124). Shares
+     * credentialRequestInProgress/activeAuthenticator/credentialRequestCancelledByUser with the
+     * single-profile flow (requestCredentialsForProfile/cancelCredentialRequest) so no two of
+     * these three actions can run concurrently, and Cancel works the same way for all of them.
+     */
+    private void runBatchRefresh(List<String> targets, String actionTitle, String emptyMessage) {
+        if (credentialRequestInProgress) {
+            JOptionPane.showMessageDialog(SwingMain.this,
+                "A credential request is already in progress. Cancel it first or wait for it to finish.",
+                "Request In Progress",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
 
         if (targets.isEmpty()) {
             JOptionPane.showMessageDialog(SwingMain.this,
-                "No profiles are currently expired or expiring soon.",
+                emptyMessage,
                 "Nothing To Refresh",
                 JOptionPane.INFORMATION_MESSAGE);
             return;
@@ -1034,7 +1073,7 @@ public class SwingMain extends JFrame {
 
         int confirm = JOptionPane.showConfirmDialog(SwingMain.this,
             "This will refresh " + targets.size() + " profile(s) via browser login, one at a time. Continue?",
-            "Refresh Expiring/Expired Profiles",
+            actionTitle,
             JOptionPane.YES_NO_OPTION,
             JOptionPane.QUESTION_MESSAGE);
         if (confirm != JOptionPane.YES_OPTION) {
@@ -1042,6 +1081,7 @@ public class SwingMain extends JFrame {
         }
 
         batchRefreshMenuItem.setEnabled(false);
+        refreshSelectedMenuItem.setEnabled(false);
         batchCancelButton.setVisible(true);
         requestCredentialsButton.setEnabled(false);
         credentialRequestInProgress = true;
@@ -1139,6 +1179,7 @@ public class SwingMain extends JFrame {
                 batchCancelButton.setVisible(false);
                 requestCredentialsButton.setEnabled(true);
                 credentialRequestInProgress = false;
+                updateRefreshSelectedMenuItemEnabled();
                 loginProgressBar.setVisible(false);
                 activeAuthenticator = null;
 
