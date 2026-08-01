@@ -142,7 +142,7 @@ public class PasswordManager {
             long expirationMillis = expirationMinutes * 60L * 1000L;
             long ageMillis = System.currentTimeMillis() - storedAt.toEpochMilli();
 
-            if (ageMillis > expirationMillis) {
+            if (ageMillis >= expirationMillis) {
                 logger.info("Stored password has expired (age: {} minutes, expiration: {} minutes)",
                     ageMillis / 60000, expirationMinutes);
                 clearPassword();
