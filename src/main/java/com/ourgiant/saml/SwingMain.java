@@ -68,6 +68,7 @@ public class SwingMain extends JFrame {
 
     private TrayIcon trayIcon;
     private final Map<String, Instant> lastNotifiedExpiration = new HashMap<>();
+    private final Set<String> expiringSoonProfiles = new HashSet<>();
 
     private ConfigManager configManager;
     private CredentialManager credentialManager;
@@ -175,7 +176,7 @@ public class SwingMain extends JFrame {
         tokenStatusTable.setFillsViewportHeight(true);
         tokenStatusTable.setRowHeight(26);
         tokenStatusTable.setToolTipText("Click a row to select that profile above, or right-click for actions. Click a column header to sort.");
-        tokenStatusTable.getColumnModel().getColumn(1).setCellRenderer(new StatusTableCellRenderer());
+        tokenStatusTable.getColumnModel().getColumn(1).setCellRenderer(new StatusTableCellRenderer(expiringSoonProfiles));
         tokenStatusRowSorter = new TableRowSorter<>(tokenStatusTableModel);
         tokenStatusTable.setRowSorter(tokenStatusRowSorter);
         JPopupMenu tableContextMenu = createTableContextMenu();
@@ -660,6 +661,7 @@ public class SwingMain extends JFrame {
     private void refreshStatusTable() {
         try {
             tokenStatusTableModel.setRowCount(0);
+            expiringSoonProfiles.clear();
             List<String> availableProfiles = configManager.getAvailableProfiles();
             databaseManager.reconcileProfiles(new HashSet<>(availableProfiles));
 
@@ -686,6 +688,9 @@ public class SwingMain extends JFrame {
                     expiresAtText = formatInstant(expiration);
                     Duration remaining = Duration.between(now, expiration);
                     timeRemaining = formatDuration(remaining);
+                    if (remaining.compareTo(EXPIRY_WARNING_THRESHOLD) <= 0) {
+                        expiringSoonProfiles.add(profile);
+                    }
                     maybeNotifyExpiringSoon(profile, expiration, remaining);
                 } else {
                     status = "EXPIRED";
@@ -937,13 +942,25 @@ public class SwingMain extends JFrame {
     }
 
     private static class StatusTableCellRenderer extends DefaultTableCellRenderer {
+        private final Set<String> expiringSoonProfiles;
+
+        StatusTableCellRenderer(Set<String> expiringSoonProfiles) {
+            this.expiringSoonProfiles = expiringSoonProfiles;
+        }
+
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
                                                        boolean hasFocus, int row, int column) {
             Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             if (column == 1 && value instanceof String status) {
                 switch (status) {
-                    case "VALID" -> component.setForeground(new Color(0, 128, 0));
+                    case "VALID" -> {
+                        // getValueAt (unlike the table model) takes view coordinates, so this
+                        // stays correct under the row sorter/filter.
+                        String profile = (String) table.getValueAt(row, 0);
+                        component.setForeground(expiringSoonProfiles.contains(profile)
+                            ? expiringSoonForeground() : new Color(0, 128, 0));
+                    }
                     case "EXPIRED" -> component.setForeground(expiredForeground());
                     default -> component.setForeground(unknownForeground());
                 }
@@ -963,6 +980,11 @@ public class SwingMain extends JFrame {
         // through to the light-background red — a sensible default there too.
         private static Color expiredForeground() {
             return FlatLaf.isLafDark() ? new Color(255, 110, 110) : Color.RED;
+        }
+
+        // Same light/dark contrast reasoning as expiredForeground().
+        private static Color expiringSoonForeground() {
+            return FlatLaf.isLafDark() ? new Color(255, 193, 7) : new Color(184, 92, 0);
         }
     }
 
