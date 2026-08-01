@@ -50,11 +50,33 @@ public class SamlAuthenticator {
     }
 
     /**
-     * Main method to request credentials for a profile
+     * Main method to request credentials for a profile: logs in, then assumes that profile's
+     * role. Implemented on top of performLoginAndGetAssertion()/assumeRoleAndSaveCredentials()
+     * below, which a caller driving several profiles can use directly to share one login's
+     * assertion across all of them (see #124) instead of logging in once per profile.
      */
     public void requestCredentials(String profileName, boolean useOktaFastPass, boolean showBrowser,
                                    Consumer<String> statusCallback) throws Exception {
-        logger.info("Starting credential request for profile: {}", profileName);
+        String samlResponse = performLoginAndGetAssertion(profileName, useOktaFastPass, showBrowser, statusCallback);
+        assumeRoleAndSaveCredentials(profileName, samlResponse, statusCallback);
+    }
+
+    /**
+     * Performs the browser SAML login for the given profile's identity provider/username and
+     * returns the raw SAML assertion, without assuming any AWS role yet.
+     *
+     * The returned assertion is not scoped to this profile's role — role selection happens
+     * later, purely via assumeRoleAndSaveCredentials()'s AssumeRoleWithSAML call (the visible
+     * in-browser "select a role" click in BrowserLoginHandler.selectRoleAndSignIn() is a
+     * cosmetic step that only runs when showBrowser is true, and only *after* this method has
+     * already captured the assertion — it has no bearing on what the assertion contains). That
+     * means this same assertion is valid to drive assumeRoleAndSaveCredentials() for *any*
+     * profile sharing this profile's identity provider and username, until the assertion's own
+     * short server-side validity window elapses.
+     */
+    public String performLoginAndGetAssertion(String profileName, boolean useOktaFastPass, boolean showBrowser,
+                                                Consumer<String> statusCallback) throws Exception {
+        logger.info("Starting SAML login for profile: {}", profileName);
         statusCallback.accept("Loading configuration for profile: " + profileName + "...");
 
         // Get profile configuration
@@ -62,8 +84,6 @@ public class SamlAuthenticator {
         String accountNumber = configManager.getAccountNumber(profileName);
         String iamRole = configManager.getIamRole(profileName);
         String username = configManager.getUsername(profileName);
-        String awsRegion = configManager.getAwsRegion(profileName);
-        int sessionDuration = configManager.getSessionDuration(profileName);
 
         if (samlProvider == null || accountNumber == null || iamRole == null) {
             throw new IllegalArgumentException("Incomplete profile configuration for: " + profileName);
@@ -88,6 +108,26 @@ public class SamlAuthenticator {
 
         if (cancelled) {
             throw new CancellationException("Credential request cancelled for profile: " + profileName);
+        }
+
+        return samlResponse;
+    }
+
+    /**
+     * Assumes the given profile's configured AWS role using an already-obtained SAML assertion
+     * (from performLoginAndGetAssertion() — possibly shared across several profiles, see #124)
+     * and saves the resulting credentials.
+     */
+    public void assumeRoleAndSaveCredentials(String profileName, String samlResponse,
+                                              Consumer<String> statusCallback) throws Exception {
+        String samlProvider = configManager.getSamlProvider(profileName);
+        String accountNumber = configManager.getAccountNumber(profileName);
+        String iamRole = configManager.getIamRole(profileName);
+        String awsRegion = configManager.getAwsRegion(profileName);
+        int sessionDuration = configManager.getSessionDuration(profileName);
+
+        if (samlProvider == null || accountNumber == null || iamRole == null) {
+            throw new IllegalArgumentException("Incomplete profile configuration for: " + profileName);
         }
 
         // Parse SAML and get role ARN

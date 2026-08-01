@@ -30,13 +30,16 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Main Swing application for AWS SAML authentication
@@ -981,6 +984,21 @@ public class SwingMain extends JFrame {
     }
 
     /**
+     * Groups profiles that can share a single SAML login: same identity key (in practice,
+     * samlProvider + username), each group in first-seen order. Pure/static so the grouping
+     * logic itself is unit-testable without ConfigManager or live Swing state, per this
+     * project's convention of pulling logic out of Swing components where practical.
+     */
+    static List<List<String>> groupProfilesBySharedIdentity(List<String> profiles,
+                                                              Function<String, String> identityKeyFn) {
+        Map<String, List<String>> byIdentity = new LinkedHashMap<>();
+        for (String profile : profiles) {
+            byIdentity.computeIfAbsent(identityKeyFn.apply(profile), k -> new ArrayList<>()).add(profile);
+        }
+        return new ArrayList<>(byIdentity.values());
+    }
+
+    /**
      * Sequentially drives a fresh credential request for every profile currently EXPIRED or
      * within EXPIRY_WARNING_THRESHOLD of expiring, so a user managing many profiles doesn't have
      * to repeat "select profile, click Request Credentials, wait" once per stale profile. Shares
@@ -1035,33 +1053,74 @@ public class SwingMain extends JFrame {
             @Override
             protected List<BatchRefreshResult> doInBackground() {
                 List<BatchRefreshResult> results = new ArrayList<>();
-                for (int i = 0; i < targets.size(); i++) {
+
+                // Watching the browser only makes sense one login at a time (the visual
+                // role-selection step doesn't generalize to a shared login) - keep every
+                // profile its own group in that case. Otherwise, profiles on the same identity
+                // provider + username share one login's SAML assertion (see #124) instead of
+                // logging in once per profile.
+                List<List<String>> groups = showBrowserCheckBox.isSelected()
+                    ? targets.stream().map(List::of).collect(Collectors.toList())
+                    : groupProfilesBySharedIdentity(targets,
+                        p -> configManager.getSamlProvider(p) + "|" + configManager.getUsername(p));
+
+                int completed = 0;
+                groupLoop:
+                for (List<String> group : groups) {
                     if (credentialRequestCancelledByUser) {
                         break;
                     }
-                    String profile = targets.get(i);
-                    String progressPrefix = "Refreshing " + (i + 1) + " of " + targets.size() + " (" + profile + "): ";
-                    publish(progressPrefix + "starting...");
+
+                    String representativeProfile = group.get(0);
+                    String loginPrefix = group.size() > 1
+                        ? "Logging in once for " + group.size() + " profiles sharing "
+                            + representativeProfile + "'s identity provider: "
+                        : "Refreshing " + (completed + 1) + " of " + targets.size()
+                            + " (" + representativeProfile + "): ";
+                    publish(loginPrefix + "starting...");
 
                     SamlAuthenticator authenticator = new SamlAuthenticator();
                     activeAuthenticator = authenticator;
+                    String assertion;
                     try {
-                        authenticator.requestCredentials(
-                            profile,
+                        assertion = authenticator.performLoginAndGetAssertion(
+                            representativeProfile,
                             databaseManager.getFastPassEnabled(),
                             showBrowserCheckBox.isSelected(),
-                            msg -> publish(progressPrefix + msg)
+                            msg -> publish(loginPrefix + msg)
                         );
-                        results.add(new BatchRefreshResult(profile, true, null));
                     } catch (Exception ex) {
+                        activeAuthenticator = null;
                         if (credentialRequestCancelledByUser) {
-                            // Cancelled mid-flight: don't report the interrupted profile as a failure.
+                            // Cancelled mid-flight: don't report the interrupted group as failures.
                             break;
                         }
+                        // The shared login itself failed: every profile in the group failed with it.
                         CredentialRequestError error = CredentialRequestError.classify(ex);
-                        results.add(new BatchRefreshResult(profile, false, error.statusMessage()));
-                    } finally {
-                        activeAuthenticator = null;
+                        for (String profile : group) {
+                            results.add(new BatchRefreshResult(profile, false, error.statusMessage()));
+                        }
+                        completed += group.size();
+                        continue;
+                    }
+                    activeAuthenticator = null;
+
+                    for (String profile : group) {
+                        if (credentialRequestCancelledByUser) {
+                            break groupLoop;
+                        }
+                        completed++;
+                        String progressPrefix = "Refreshing " + completed + " of " + targets.size()
+                            + " (" + profile + "): ";
+                        publish(progressPrefix + "assuming role...");
+                        try {
+                            authenticator.assumeRoleAndSaveCredentials(profile, assertion,
+                                msg -> publish(progressPrefix + msg));
+                            results.add(new BatchRefreshResult(profile, true, null));
+                        } catch (Exception ex) {
+                            CredentialRequestError error = CredentialRequestError.classify(ex);
+                            results.add(new BatchRefreshResult(profile, false, error.statusMessage()));
+                        }
                     }
                 }
                 return results;
