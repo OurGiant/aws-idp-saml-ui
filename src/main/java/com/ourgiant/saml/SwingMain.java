@@ -51,7 +51,8 @@ public class SwingMain extends JFrame {
     private JButton showEncryptedButton;
     private JButton showCredentialsButton;
     private JButton openConsoleButton;
-    private JButton batchRefreshButton;
+    private JMenuItem batchRefreshMenuItem;
+    private JButton batchCancelButton;
 
     private DefaultTableModel tokenStatusTableModel;
     private JTable tokenStatusTable;
@@ -269,13 +270,6 @@ public class SwingMain extends JFrame {
         refreshStatusButton.addActionListener(e -> refreshStatusTable());
         refreshStatusButton.setToolTipText("Recheck credential expiration status for all profiles");
         statusControls.add(refreshStatusButton);
-
-        batchRefreshButton = new JButton("Refresh Expiring/Expired");
-        batchRefreshButton.setMnemonic(KeyEvent.VK_E);
-        batchRefreshButton.addActionListener(new BatchRefreshListener());
-        batchRefreshButton.setToolTipText("Renew credentials (via browser login) for every profile that's "
-            + "expired or within " + formatDuration(EXPIRY_WARNING_THRESHOLD) + " of expiring");
-        statusControls.add(batchRefreshButton);
         lastRefreshedLabel = new JLabel();
         statusControls.add(lastRefreshedLabel);
         tokenStatusPanel.add(statusControls, BorderLayout.SOUTH);
@@ -294,6 +288,14 @@ public class SwingMain extends JFrame {
         loginProgressBar.setIndeterminate(true);
         loginProgressBar.setVisible(false);
         statusPanel.add(loginProgressBar);
+        // Only shown while a batch refresh is actually running (see
+        // refreshExpiringOrExpiredProfiles()), so cancelling stays a single visible click away
+        // in the moment it matters without giving the batch action a permanent seat on the
+        // main screen the rest of the time.
+        batchCancelButton = new JButton("Cancel Batch Refresh");
+        batchCancelButton.addActionListener(e -> cancelCredentialRequest());
+        batchCancelButton.setVisible(false);
+        statusPanel.add(batchCancelButton);
         add(statusPanel, BorderLayout.SOUTH);
 
         pack();
@@ -334,6 +336,19 @@ public class SwingMain extends JFrame {
         fileMenu.add(exitMenuItem);
 
         menuBar.add(fileMenu);
+
+        JMenu actionsMenu = new JMenu("Actions");
+        actionsMenu.setMnemonic(KeyEvent.VK_A);
+
+        batchRefreshMenuItem = new JMenuItem("Refresh Expiring/Expired Profiles...");
+        batchRefreshMenuItem.setMnemonic(KeyEvent.VK_E);
+        batchRefreshMenuItem.addActionListener(e -> refreshExpiringOrExpiredProfiles());
+        batchRefreshMenuItem.setToolTipText("Renew credentials (via browser login) for every profile that's "
+            + "expired or within " + formatDuration(EXPIRY_WARNING_THRESHOLD) + " of expiring");
+        actionsMenu.add(batchRefreshMenuItem);
+
+        menuBar.add(actionsMenu);
+
         return menuBar;
     }
 
@@ -899,7 +914,7 @@ public class SwingMain extends JFrame {
         // Swap the button to a Cancel affordance during processing
         requestCredentialsButton.setText("Cancel");
         requestCredentialsButton.setToolTipText("Cancel the in-progress credential request");
-        batchRefreshButton.setEnabled(false);
+        batchRefreshMenuItem.setEnabled(false);
         credentialRequestInProgress = true;
         credentialRequestCancelledByUser = false;
         loginProgressBar.setVisible(true);
@@ -925,7 +940,7 @@ public class SwingMain extends JFrame {
             protected void done() {
                 requestCredentialsButton.setText("Request Credentials");
                 requestCredentialsButton.setToolTipText("Launch browser login and fetch AWS credentials for the selected profile");
-                batchRefreshButton.setEnabled(true);
+                batchRefreshMenuItem.setEnabled(true);
                 credentialRequestInProgress = false;
                 loginProgressBar.setVisible(false);
                 activeAuthenticator = null;
@@ -959,17 +974,6 @@ public class SwingMain extends JFrame {
         credentialRequestCancelledByUser = true;
         if (activeAuthenticator != null) {
             activeAuthenticator.cancel();
-        }
-    }
-
-    private class BatchRefreshListener implements ActionListener {
-        @Override
-        public void actionPerformed(ActionEvent e) {
-            if (credentialRequestInProgress) {
-                cancelCredentialRequest();
-            } else {
-                refreshExpiringOrExpiredProfiles();
-            }
         }
     }
 
@@ -1010,8 +1014,17 @@ public class SwingMain extends JFrame {
             return;
         }
 
-        batchRefreshButton.setText("Cancel");
-        batchRefreshButton.setToolTipText("Cancel the in-progress batch refresh");
+        int confirm = JOptionPane.showConfirmDialog(SwingMain.this,
+            "This will refresh " + targets.size() + " profile(s) via browser login, one at a time. Continue?",
+            "Refresh Expiring/Expired Profiles",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.QUESTION_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        batchRefreshMenuItem.setEnabled(false);
+        batchCancelButton.setVisible(true);
         requestCredentialsButton.setEnabled(false);
         credentialRequestInProgress = true;
         credentialRequestCancelledByUser = false;
@@ -1063,9 +1076,8 @@ public class SwingMain extends JFrame {
 
             @Override
             protected void done() {
-                batchRefreshButton.setText("Refresh Expiring/Expired");
-                batchRefreshButton.setToolTipText("Renew credentials (via browser login) for every profile that's "
-                    + "expired or within " + formatDuration(EXPIRY_WARNING_THRESHOLD) + " of expiring");
+                batchRefreshMenuItem.setEnabled(true);
+                batchCancelButton.setVisible(false);
                 requestCredentialsButton.setEnabled(true);
                 credentialRequestInProgress = false;
                 loginProgressBar.setVisible(false);
