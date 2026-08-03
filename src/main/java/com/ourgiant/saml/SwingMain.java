@@ -387,9 +387,16 @@ public class SwingMain extends JFrame {
      * @param knownNewerRelease if non-null (tagName-or-version, releaseUrl), an already-confirmed newer
      *                          release to render immediately instead of performing a live GitHub check —
      *                          used when the silent startup check already found and confirmed an update.
+     *                          That silent path also makes the dialog non-modal, so an update found in
+     *                          the background never blocks the main window; Help > About (a deliberate
+     *                          click) stays modal, the normal expectation for that kind of dialog.
      */
     private void showAboutDialog(String[] knownNewerRelease) {
         final String currentVersion = resolveCurrentVersion();
+        final boolean modal = knownNewerRelease == null;
+
+        JDialog dialog = new JDialog(this, "About AWS IDP SAML UI", modal);
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -421,6 +428,12 @@ public class SwingMain extends JFrame {
         panel.add(copyrightLabel);
         panel.add(Box.createVerticalStrut(8));
         panel.add(updateLabel);
+        panel.add(Box.createVerticalStrut(12));
+
+        JButton closeButton = new JButton("Close");
+        closeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        closeButton.addActionListener(e -> dialog.dispose());
+        panel.add(closeButton);
 
         if (knownNewerRelease != null) {
             applyUpdateAvailableLabel(updateLabel, knownNewerRelease[0], knownNewerRelease[1]);
@@ -459,7 +472,11 @@ public class SwingMain extends JFrame {
             versionChecker.execute();
         }
 
-        JOptionPane.showMessageDialog(this, panel, "About AWS IDP SAML UI", JOptionPane.PLAIN_MESSAGE);
+        dialog.getContentPane().add(panel);
+        dialog.getRootPane().setDefaultButton(closeButton);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
     }
 
     private void applyUpdateAvailableLabel(JLabel updateLabel, String latestVersion, String releaseUrl) {
