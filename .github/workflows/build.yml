@@ -92,7 +92,11 @@ jobs:
             --app-version ${{ steps.version.outputs.version }} \
             --vendor OurGiant \
             --type deb \
-            --icon src/main/resources/saml_swing_icon_small.png \
+            --icon src/packaging/linux/app-icon.png \
+            --description "Java UI client for AWS SAML authentication" \
+            --linux-menu-group "Network;Utility;" \
+            --linux-shortcut \
+            --resource-dir src/packaging/linux \
             --dest installer-output
 
       - name: Upload Linux artifacts
