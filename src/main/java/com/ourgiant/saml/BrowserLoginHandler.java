@@ -26,6 +26,8 @@ import java.util.function.Function;
 public class BrowserLoginHandler {
     private static final Logger logger = LoggerFactory.getLogger(BrowserLoginHandler.class);
 
+    private static final Duration MAIN_WAIT_TIMEOUT = Duration.ofSeconds(60);
+
     private final WebDriver driver;
     private final WebDriverWait wait;
     private final boolean useOktaFastPass;
@@ -47,7 +49,7 @@ public class BrowserLoginHandler {
         // performLogin()/handleOktaLogin()/waitForSamlResponse() - the various short "probe"
         // waits elsewhere in this class (3s/5s/10s, used to detect *optional* page states) are
         // deliberately short by design and untouched here.
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(60));
+        this.wait = new WebDriverWait(driver, MAIN_WAIT_TIMEOUT);
         this.useOktaFastPass = useOktaFastPass;
         this.passwordManager = passwordManager;
         this.showBrowser = showBrowser;
@@ -66,6 +68,23 @@ public class BrowserLoginHandler {
             if (cancelled.getAsBoolean()) {
                 throw new CancellationException("Login cancelled");
             }
+            return condition.apply(driver);
+        });
+    }
+
+    /**
+     * Same as {@link #until}, but reports a countdown against {@code timeout} on every poll so a
+     * long, otherwise-silent wait (MFA approval) doesn't look indistinguishable from a hung app.
+     */
+    private <V> V untilWithCountdown(WebDriverWait waitInstance, Function<WebDriver, V> condition,
+                                      Duration timeout, String waitingMessage) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        return waitInstance.until(driver -> {
+            if (cancelled.getAsBoolean()) {
+                throw new CancellationException("Login cancelled");
+            }
+            long remainingSeconds = Math.max(0, (deadline - System.currentTimeMillis()) / 1000);
+            statusCallback.accept(waitingMessage + " (" + remainingSeconds + "s remaining)...");
             return condition.apply(driver);
         });
     }
@@ -380,8 +399,8 @@ public class BrowserLoginHandler {
     private String waitForSamlResponse() throws Exception {
         logger.info("Waiting for SAML response...");
 
-        statusCallback.accept("Waiting for redirect to AWS sign-in page...");
-        until(wait, ExpectedConditions.urlContains("signin.aws.amazon.com"));
+        untilWithCountdown(wait, ExpectedConditions.urlContains("signin.aws.amazon.com"),
+                MAIN_WAIT_TIMEOUT, "Waiting for redirect to AWS sign-in page");
 
         statusCallback.accept("Capturing SAML response...");
 
