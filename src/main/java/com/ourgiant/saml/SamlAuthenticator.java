@@ -197,7 +197,6 @@ public class SamlAuthenticator {
         if (!showBrowser) {
             options.addArguments("--headless");
         }
-        options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
 
         // Set webdriver.chrome.driver if not set
