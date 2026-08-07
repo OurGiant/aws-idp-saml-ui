@@ -27,10 +27,10 @@ class SamlParserTest {
         List<SamlRole> roles = parser.parseRolesFromSaml(encode(saml));
 
         assertEquals(2, roles.size());
-        assertEquals("123456789012", roles.get(0).getAccountNumber());
-        assertEquals("AdminRole", roles.get(0).getRoleName());
-        assertEquals("987654321098", roles.get(1).getAccountNumber());
-        assertEquals("ReadOnlyRole", roles.get(1).getRoleName());
+        assertEquals("123456789012", roles.get(0).accountNumber());
+        assertEquals("AdminRole", roles.get(0).roleName());
+        assertEquals("987654321098", roles.get(1).accountNumber());
+        assertEquals("ReadOnlyRole", roles.get(1).roleName());
     }
 
     @Test
