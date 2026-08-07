@@ -965,7 +965,7 @@ public class SwingMain extends JFrame {
         loginProgressBar.setVisible(true);
         statusLabel.setText("Starting credential request for profile: " + selectedProfile + "...");
 
-        SamlAuthenticator authenticator = new SamlAuthenticator();
+        SamlAuthenticator authenticator = new SamlAuthenticator(configManager, credentialManager, passwordManager);
         activeAuthenticator = authenticator;
 
         // Run credential request in background thread
@@ -1169,7 +1169,7 @@ public class SwingMain extends JFrame {
                             + " (" + representativeProfile + "): ";
                     publish(loginPrefix + "starting...");
 
-                    SamlAuthenticator authenticator = new SamlAuthenticator();
+                    SamlAuthenticator authenticator = new SamlAuthenticator(configManager, credentialManager, passwordManager);
                     activeAuthenticator = authenticator;
                     String assertion;
                     try {
