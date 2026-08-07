@@ -107,4 +107,59 @@ class ConfigManagerTest {
         assertFalse(written.contains("\\:"), "created samlsts should not contain escaped colons:\n" + written);
         assertTrue(written.contains("https://example.okta.com/app/example/sso/saml"));
     }
+
+    @Test
+    void profileScopedGetters_preferProfileOverGlobal() throws Exception {
+        writeSamlsts("""
+                [global]
+                accountnumber = 000000000000
+                iamrole = GlobalRole
+                samlprovider = Fed-Global
+
+                [my-profile]
+                accountnumber = 111111111111
+                iamrole = ProfileRole
+                samlprovider = Fed-Profile
+                """);
+
+        configManager = new ConfigManager();
+
+        assertEquals("111111111111", configManager.getAccountNumber("my-profile"));
+        assertEquals("ProfileRole", configManager.getIamRole("my-profile"));
+        assertEquals("Fed-Profile", configManager.getSamlProvider("my-profile"));
+    }
+
+    @Test
+    void profileScopedGetters_fallBackToGlobalWhenProfileOmitsKey() throws Exception {
+        writeSamlsts("""
+                [global]
+                accountnumber = 000000000000
+                iamrole = GlobalRole
+                samlprovider = Fed-Global
+                awsregion = us-west-2
+
+                [my-profile]
+                """);
+
+        configManager = new ConfigManager();
+
+        assertEquals("000000000000", configManager.getAccountNumber("my-profile"));
+        assertEquals("GlobalRole", configManager.getIamRole("my-profile"));
+        assertEquals("Fed-Global", configManager.getSamlProvider("my-profile"));
+        assertEquals("us-west-2", configManager.getAwsRegion("my-profile"));
+    }
+
+    @Test
+    void getAwsRegion_defaultsToUsEast1WhenUnset() throws Exception {
+        writeSamlsts("""
+                [global]
+                idp_entry_url = https://example.okta.com/app/example/sso/saml
+
+                [my-profile]
+                """);
+
+        configManager = new ConfigManager();
+
+        assertEquals("us-east-1", configManager.getAwsRegion("my-profile"));
+    }
 }

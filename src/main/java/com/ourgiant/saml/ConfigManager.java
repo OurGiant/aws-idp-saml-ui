@@ -95,116 +95,64 @@ public class ConfigManager {
     }
 
     /**
+     * Looks up a key on the named profile, falling back to the same key on the global
+     * section when the profile doesn't set it (or doesn't exist). Every profile-scoped
+     * setting below follows this same precedence.
+     */
+    private String getWithGlobalFallback(String profileName, String key) {
+        Profile.Section profile = getProfile(profileName);
+        if (profile != null) {
+            String value = profile.get(key);
+            if (value != null) {
+                return value;
+            }
+        }
+
+        Profile.Section global = getGlobalConfig();
+        return global != null ? global.get(key) : null;
+    }
+
+    /**
      * Get AWS region for a profile
      */
     public String getAwsRegion(String profileName) {
-        Profile.Section profile = getProfile(profileName);
-        if (profile != null) {
-            String region = profile.get("awsregion");
-            if (region != null) {
-                return region;
-            }
-        }
-
-        // Fall back to global config
-        Profile.Section global = getGlobalConfig();
-        if (global != null) {
-            String region = global.get("awsregion");
-            if (region != null) {
-                return region;
-            }
-            return "us-east-1";
-        }
-
-        return "us-east-1";
+        String region = getWithGlobalFallback(profileName, "awsregion");
+        return region != null ? region : "us-east-1";
     }
 
     /**
      * Get account number for a profile
      */
     public String getAccountNumber(String profileName) {
-        Profile.Section profile = getProfile(profileName);
-        if (profile != null) {
-            String accountNumber = profile.get("accountnumber");
-            if (accountNumber != null) {
-                return accountNumber;
-            }
-        }
-
-        // Fall back to global config
-        Profile.Section global = getGlobalConfig();
-        if (global != null) {
-            return global.get("accountnumber");
-        }
-
-        return null;
+        return getWithGlobalFallback(profileName, "accountnumber");
     }
 
     /**
      * Get IAM role for a profile
      */
     public String getIamRole(String profileName) {
-        Profile.Section profile = getProfile(profileName);
-        if (profile != null) {
-            String iamRole = profile.get("iamrole");
-            if (iamRole != null) {
-                return iamRole;
-            }
-        }
-
-        // Fall back to global config
-        Profile.Section global = getGlobalConfig();
-        if (global != null) {
-            return global.get("iamrole");
-        }
-
-        return null;
+        return getWithGlobalFallback(profileName, "iamrole");
     }
 
     /**
      * Get SAML provider for a profile
      */
     public String getSamlProvider(String profileName) {
-        Profile.Section profile = getProfile(profileName);
-        if (profile != null) {
-            String samlProvider = profile.get("samlprovider");
-            if (samlProvider != null) {
-                return samlProvider;
-            }
-        }
-
-        // Fall back to global config
-        Profile.Section global = getGlobalConfig();
-        if (global != null) {
-            return global.get("samlprovider");
-        }
-
-        return null;
+        return getWithGlobalFallback(profileName, "samlprovider");
     }
 
     /**
      * Get username for a profile
      */
     public String getUsername(String profileName) {
-        Profile.Section profile = getProfile(profileName);
-        if (profile != null) {
-            String username = profile.get("username");
-            if (username != null) {
-                return username;
-            }
+        String username = getWithGlobalFallback(profileName, "username");
+        if (username != null) {
+            return username;
         }
 
-        // Fall back to global config - also check lowercase variant
+        // Legacy capitalized variant, global-only
         Profile.Section global = getGlobalConfig();
-        if (global != null) {
-            String username = global.get("username");
-            if (username != null) {
-                return username;
-            }
-            return global.get("User");
-        }
-
-        return null;
+        return global != null ? global.get("User") : null;
     }
 
     /**

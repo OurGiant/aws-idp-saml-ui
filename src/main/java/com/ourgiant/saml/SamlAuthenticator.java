@@ -212,8 +212,8 @@ public class SamlAuthenticator {
      */
     private String findMatchingRole(java.util.List<SamlRole> roles, String accountNumber, String iamRole) {
         for (SamlRole role : roles) {
-            if (role.getAccountNumber().equals(accountNumber) && role.getRoleName().equals(iamRole)) {
-                return role.getRoleArn();
+            if (role.accountNumber().equals(accountNumber) && role.roleName().equals(iamRole)) {
+                return role.roleArn();
             }
         }
         throw new RuntimeException("Matching role not found in SAML response: " + accountNumber + "/" + iamRole);
