@@ -28,10 +28,11 @@ public class SamlAuthenticator {
     private final PasswordManager passwordManager;
     private volatile boolean cancelled = false;
 
-    public SamlAuthenticator() {
-        this.configManager = new ConfigManager();
-        this.credentialManager = new CredentialManager();
-        this.passwordManager = new PasswordManager(new DatabaseManager());
+    public SamlAuthenticator(ConfigManager configManager, CredentialManager credentialManager,
+                              PasswordManager passwordManager) {
+        this.configManager = configManager;
+        this.credentialManager = credentialManager;
+        this.passwordManager = passwordManager;
     }
 
     // Just sets a flag that BrowserLoginHandler checks between polls of every Selenium wait,
@@ -210,7 +211,7 @@ public class SamlAuthenticator {
     /**
      * Find matching role from SAML response
      */
-    private String findMatchingRole(java.util.List<SamlRole> roles, String accountNumber, String iamRole) {
+    String findMatchingRole(java.util.List<SamlRole> roles, String accountNumber, String iamRole) {
         for (SamlRole role : roles) {
             if (role.accountNumber().equals(accountNumber) && role.roleName().equals(iamRole)) {
                 return role.roleArn();
