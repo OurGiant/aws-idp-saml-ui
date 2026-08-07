@@ -14,11 +14,6 @@ import software.amazon.awssdk.services.sts.model.AssumeRoleWithSamlRequest;
 import software.amazon.awssdk.services.sts.model.AssumeRoleWithSamlResponse;
 import software.amazon.awssdk.services.sts.model.Credentials;
 
-import java.nio.file.Files;
-import java.io.File;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
 
@@ -199,14 +194,6 @@ public class SamlAuthenticator {
         }
         options.addArguments("--disable-dev-shm-usage");
 
-        // Set webdriver.chrome.driver if not set
-        if (System.getProperty("webdriver.chrome.driver") == null) {
-            String driverPath = findBrowserDriver("chromedriver.exe");
-            if (driverPath != null) {
-                System.setProperty("webdriver.chrome.driver", driverPath);
-            }
-        }
-
         return new ChromeDriver(options);
     }
 
@@ -217,65 +204,7 @@ public class SamlAuthenticator {
         }
         System.setProperty("webdriver.manager.stats", "false");
 
-        // Set webdriver.gecko.driver if not set
-        if (System.getProperty("webdriver.gecko.driver") == null) {
-            String driverPath = findBrowserDriver("geckodriver.exe");
-            if (driverPath != null) {
-                System.setProperty("webdriver.gecko.driver", driverPath);
-            }
-        }
-
         return new FirefoxDriver(options);
-    }
-
-    /**
-     * Find browser driver in common locations
-     */
-    private String findBrowserDriver(String driverName) {
-        // Check current directory
-        Path currentDir = Paths.get(".");
-        Path driverPath = currentDir.resolve("drivers").resolve(driverName);
-        if (Files.exists(driverPath)) {
-            return driverPath.toAbsolutePath().toString();
-        }
-
-        // Check drivers directory relative to executable (works in packaged app-image)
-        Path executableDir;
-        try {
-            executableDir = Path.of(ProcessHandle.current()
-                .info()
-                .command()
-                .orElseThrow())
-                .getParent();
-        } catch (Exception e) {
-            executableDir = null;
-        }
-
-        if (executableDir != null) {
-            driverPath = executableDir.resolve("drivers").resolve(driverName);
-            if (Files.exists(driverPath)) {
-                return driverPath.toAbsolutePath().toString();
-            }
-        }
-
-        // Check system PATH
-        String pathEnv = System.getenv("PATH");
-        if (pathEnv != null) {
-            for (String dir : pathEnv.split(File.pathSeparator)) {
-                if (dir.startsWith("$") || dir.startsWith("%")) continue;
-                try {
-                    Path candidate = Paths.get(dir, driverName);
-                    if (Files.exists(candidate)) {
-                        return candidate.toAbsolutePath().toString();
-                    }
-                } catch (InvalidPathException e) {
-                    logger.warn("Skipping invalid PATH entry: {}", dir);
-                }
-            }
-        }
-
-        logger.warn("Browser driver not found: {}", driverName);
-        return null;
     }
 
     /**
