@@ -30,16 +30,13 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.function.Function;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * Main Swing application for AWS SAML authentication
@@ -85,6 +82,7 @@ public class SwingMain extends JFrame {
     private TokenStateManager tokenStateManager;
     private DatabaseManager databaseManager;
     private PasswordManager passwordManager;
+    private BatchRefreshRunner batchRefreshRunner;
 
     public SwingMain() {
         configManager = new ConfigManager();
@@ -92,6 +90,7 @@ public class SwingMain extends JFrame {
         tokenStateManager = new TokenStateManager();
         databaseManager = new DatabaseManager();
         passwordManager = new PasswordManager(databaseManager);
+        batchRefreshRunner = new BatchRefreshRunner(configManager, credentialManager, passwordManager, databaseManager);
 
         // Set theme
         setLookAndFeel();
@@ -1023,24 +1022,6 @@ public class SwingMain extends JFrame {
         }
     }
 
-    private record BatchRefreshResult(String profile, boolean success, String detail) {
-    }
-
-    /**
-     * Groups profiles that can share a single SAML login: same identity key (in practice,
-     * samlProvider + username), each group in first-seen order. Pure/static so the grouping
-     * logic itself is unit-testable without ConfigManager or live Swing state, per this
-     * project's convention of pulling logic out of Swing components where practical.
-     */
-    static List<List<String>> groupProfilesBySharedIdentity(List<String> profiles,
-                                                              Function<String, String> identityKeyFn) {
-        Map<String, List<String>> byIdentity = new LinkedHashMap<>();
-        for (String profile : profiles) {
-            byIdentity.computeIfAbsent(identityKeyFn.apply(profile), k -> new ArrayList<>()).add(profile);
-        }
-        return new ArrayList<>(byIdentity.values());
-    }
-
     private void updateRefreshSelectedMenuItemEnabled() {
         refreshSelectedMenuItem.setEnabled(!credentialRequestInProgress && tokenStatusTable.getSelectedRowCount() > 0);
     }
@@ -1139,81 +1120,16 @@ public class SwingMain extends JFrame {
         loginProgressBar.setVisible(true);
         statusLabel.setText("Starting batch refresh for " + targets.size() + " profile(s)...");
 
-        SwingWorker<List<BatchRefreshResult>, String> worker = new SwingWorker<>() {
+        SwingWorker<List<BatchRefreshRunner.Result>, String> worker = new SwingWorker<>() {
             @Override
-            protected List<BatchRefreshResult> doInBackground() {
-                List<BatchRefreshResult> results = new ArrayList<>();
-
-                // Watching the browser only makes sense one login at a time (the visual
-                // role-selection step doesn't generalize to a shared login) - keep every
-                // profile its own group in that case. Otherwise, profiles on the same identity
-                // provider + username share one login's SAML assertion (see #124) instead of
-                // logging in once per profile.
-                List<List<String>> groups = showBrowserCheckBox.isSelected()
-                    ? targets.stream().map(List::of).collect(Collectors.toList())
-                    : groupProfilesBySharedIdentity(targets,
-                        p -> configManager.getSamlProvider(p) + "|" + configManager.getUsername(p));
-
-                int completed = 0;
-                groupLoop:
-                for (List<String> group : groups) {
-                    if (credentialRequestCancelledByUser) {
-                        break;
-                    }
-
-                    String representativeProfile = group.get(0);
-                    String loginPrefix = group.size() > 1
-                        ? "Logging in once for " + group.size() + " profiles sharing "
-                            + representativeProfile + "'s identity provider: "
-                        : "Refreshing " + (completed + 1) + " of " + targets.size()
-                            + " (" + representativeProfile + "): ";
-                    publish(loginPrefix + "starting...");
-
-                    SamlAuthenticator authenticator = new SamlAuthenticator(configManager, credentialManager, passwordManager);
-                    activeAuthenticator = authenticator;
-                    String assertion;
-                    try {
-                        assertion = authenticator.performLoginAndGetAssertion(
-                            representativeProfile,
-                            databaseManager.getFastPassEnabled(),
-                            showBrowserCheckBox.isSelected(),
-                            msg -> publish(loginPrefix + msg)
-                        );
-                    } catch (Exception ex) {
-                        activeAuthenticator = null;
-                        if (credentialRequestCancelledByUser) {
-                            // Cancelled mid-flight: don't report the interrupted group as failures.
-                            break;
-                        }
-                        // The shared login itself failed: every profile in the group failed with it.
-                        CredentialRequestError error = CredentialRequestError.classify(ex);
-                        for (String profile : group) {
-                            results.add(new BatchRefreshResult(profile, false, error.statusMessage()));
-                        }
-                        completed += group.size();
-                        continue;
-                    }
-                    activeAuthenticator = null;
-
-                    for (String profile : group) {
-                        if (credentialRequestCancelledByUser) {
-                            break groupLoop;
-                        }
-                        completed++;
-                        String progressPrefix = "Refreshing " + completed + " of " + targets.size()
-                            + " (" + profile + "): ";
-                        publish(progressPrefix + "assuming role...");
-                        try {
-                            authenticator.assumeRoleAndSaveCredentials(profile, assertion,
-                                msg -> publish(progressPrefix + msg));
-                            results.add(new BatchRefreshResult(profile, true, null));
-                        } catch (Exception ex) {
-                            CredentialRequestError error = CredentialRequestError.classify(ex);
-                            results.add(new BatchRefreshResult(profile, false, error.statusMessage()));
-                        }
-                    }
-                }
-                return results;
+            protected List<BatchRefreshRunner.Result> doInBackground() {
+                return batchRefreshRunner.run(
+                    targets,
+                    showBrowserCheckBox.isSelected(),
+                    () -> credentialRequestCancelledByUser,
+                    authenticator -> activeAuthenticator = authenticator,
+                    this::publish
+                );
             }
 
             @Override
@@ -1233,7 +1149,7 @@ public class SwingMain extends JFrame {
                 loginProgressBar.setVisible(false);
                 activeAuthenticator = null;
 
-                List<BatchRefreshResult> results;
+                List<BatchRefreshRunner.Result> results;
                 try {
                     results = get();
                 } catch (Exception ex) {
@@ -1244,8 +1160,8 @@ public class SwingMain extends JFrame {
                 refreshStatusTable();
                 updateCredentialButtons();
 
-                long succeeded = results.stream().filter(BatchRefreshResult::success).count();
-                List<BatchRefreshResult> failures = results.stream().filter(r -> !r.success()).toList();
+                long succeeded = results.stream().filter(BatchRefreshRunner.Result::success).count();
+                List<BatchRefreshRunner.Result> failures = results.stream().filter(r -> !r.success()).toList();
                 boolean cancelled = credentialRequestCancelledByUser;
                 int notAttempted = targets.size() - results.size();
 
@@ -1270,7 +1186,7 @@ public class SwingMain extends JFrame {
                         detail.append(", ").append(notAttempted).append(" not attempted (cancelled)");
                     }
                     detail.append(".\n");
-                    for (BatchRefreshResult r : failures) {
+                    for (BatchRefreshRunner.Result r : failures) {
                         detail.append("\n- ").append(r.profile()).append(": ").append(r.detail());
                     }
                     JOptionPane.showMessageDialog(SwingMain.this,
