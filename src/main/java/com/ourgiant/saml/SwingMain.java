@@ -461,7 +461,9 @@ public class SwingMain extends JFrame {
                             updateLabel.setText("Could not check for updates");
                         }
                     } catch (Exception e) {
-                        updateLabel.setText("Could not check for updates");
+                        Throwable cause = e.getCause();
+                        updateLabel.setText(cause instanceof UpdateFetchSslException sslEx
+                            ? sslEx.getMessage() : "Could not check for updates");
                         logger.debug("Version check failed", e);
                     }
                     panel.revalidate();
@@ -486,12 +488,27 @@ public class SwingMain extends JFrame {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent e) {
                 try {
-                    Desktop.getDesktop().browse(new java.net.URI(releaseUrl));
+                    java.net.URI uri = new java.net.URI(releaseUrl);
+                    if (!isTrustedReleaseUrl(uri)) {
+                        logger.warn("Refusing to open untrusted release URL: {}", releaseUrl);
+                        return;
+                    }
+                    Desktop.getDesktop().browse(uri);
                 } catch (Exception ex) {
                     logger.warn("Could not open release URL in browser", ex);
                 }
             }
         });
+    }
+
+    /**
+     * Defense in depth, not a response to a live exploit: {@code uri} comes straight from
+     * GitHub's releases API response, so a tampered response (only possible with an existing
+     * TLS MITM position) could otherwise point this at an arbitrary URI/scheme. Restrict to
+     * exactly the host the API is expected to point back to.
+     */
+    static boolean isTrustedReleaseUrl(java.net.URI uri) {
+        return "https".equalsIgnoreCase(uri.getScheme()) && "github.com".equalsIgnoreCase(uri.getHost());
     }
 
     /**
@@ -576,10 +593,21 @@ public class SwingMain extends JFrame {
                     return new String[]{tagName, htmlUrl};
                 }
             }
+        } catch (javax.net.ssl.SSLHandshakeException e) {
+            logger.warn("TLS handshake failed fetching latest release from GitHub (possible TLS-inspecting proxy)", e);
+            throw new UpdateFetchSslException(
+                "Couldn't verify the secure connection (possible corporate network proxy)", e);
         } catch (Exception e) {
             logger.debug("Failed to fetch latest release from GitHub", e);
         }
         return null;
+    }
+
+    /** Lets the update-check UI distinguish "TLS handshake failed" from any other fetch failure. */
+    private static class UpdateFetchSslException extends RuntimeException {
+        UpdateFetchSslException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     static String extractJsonString(String json, String key) {
