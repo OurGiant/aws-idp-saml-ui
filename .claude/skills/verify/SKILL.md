@@ -87,7 +87,8 @@ DISPLAY=:1 java -cp .:target/aws-idp-saml-ui-all.jar VerifyThing <fakehome> <arg
 Inside the harness:
 - Set `System.setProperty("user.home", fakeHome)` **before** touching any app
   class.
-- Construct the real app class on the EDT:
+- Construct the real app class (`import com.ourgiant.saml.gui.SwingMain;`) on
+  the EDT:
   `SwingUtilities.invokeAndWait(() -> { win[0] = new SwingMain(); win[0].setVisible(true); });`
 
 See `verify-java-swing` §2–4 for the general techniques used from here:

@@ -225,24 +225,30 @@ Tests use JUnit 5 and Mockito.
 
 ```
 src/main/java/com/ourgiant/saml/
-├── SwingMain.java              # Main application window
-├── FirstRunSetupDialog.java    # First-launch setup wizard
-├── SamlAuthenticator.java      # SAML authentication flow orchestration
-├── SamlParser.java             # SAML assertion parsing (XXE-hardened)
-├── BrowserLoginHandler.java    # Browser automation for the IdP login page
-├── AwsConsoleLauncher.java     # AWS federation console sign-in
-├── CredentialManager.java      # AWS credential file management
-├── CredentialsDialog.java      # Credential detail/export UI
-├── TokenStateManager.java      # Token lifecycle management
-├── DatabaseManager.java        # SQLite database operations
-├── ConfigManager.java          # samlsts config handling
-├── ConfigurationDialog.java    # Application settings UI
-├── ProfileManagerDialog.java   # Profile list management UI
-├── ProfileEditDialog.java      # Add/edit a single profile
-├── PasswordManager.java        # Password encryption/decryption
-├── FilePermissions.java        # Owner-only file permission enforcement
-├── ThemeManager.java           # UI theming
-└── SamlRole.java               # SAML role representation
+├── ThemeManager.java              # UI theming
+├── gui/                           # Swing UI - depends on core/, never the reverse
+│   ├── SwingMain.java             # Main application window (and app entry point)
+│   ├── FirstRunSetupDialog.java   # First-launch setup wizard
+│   ├── CredentialsDialog.java     # Credential detail/export UI
+│   ├── ConfigurationDialog.java   # Application settings UI
+│   ├── ProfileManagerDialog.java  # Profile list management UI
+│   └── ProfileEditDialog.java     # Add/edit a single profile
+├── core/                          # Domain logic - no javax.swing.* dependency
+│   ├── SamlAuthenticator.java     # SAML authentication flow orchestration
+│   ├── SamlParser.java            # SAML assertion parsing (XXE-hardened)
+│   ├── SamlRole.java              # SAML role representation
+│   ├── BrowserLoginHandler.java   # Browser automation for the IdP login page
+│   ├── BatchRefreshRunner.java    # Batch credential-refresh orchestration
+│   ├── AwsConsoleLauncher.java    # AWS federation console sign-in
+│   ├── CredentialManager.java     # AWS credential file management
+│   ├── CredentialRequestError.java # Failure classification for credential requests
+│   ├── TokenStateManager.java     # Token lifecycle management
+│   ├── DatabaseManager.java       # SQLite database operations
+│   ├── ConfigManager.java         # samlsts config handling
+│   └── PasswordManager.java       # Password encryption/decryption
+└── util/                          # Shared helpers with no business meaning of their own
+    ├── FilePermissions.java       # Owner-only file permission enforcement
+    └── JsonUtil.java              # Minimal JSON string-value extraction
 ```
 
 ### CI/CD

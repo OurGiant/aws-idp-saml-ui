@@ -7,7 +7,7 @@
 
     <groupId>com.ourgiant</groupId>
     <artifactId>aws-idp-saml-ui</artifactId>
-    <version>1.4.11</version>
+    <version>1.4.12</version>
     <packaging>jar</packaging>
 
     <name>AWS IDP SAML UI Client</name>
@@ -185,7 +185,7 @@
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.ourgiant.saml.SwingMain</mainClass>
+                                    <mainClass>com.ourgiant.saml.gui.SwingMain</mainClass>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
