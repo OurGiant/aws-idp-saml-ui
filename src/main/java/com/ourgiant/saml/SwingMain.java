@@ -1161,9 +1161,14 @@ public class SwingMain extends JFrame {
         SwingWorker<List<BatchRefreshRunner.Result>, String> worker = new SwingWorker<>() {
             @Override
             protected List<BatchRefreshRunner.Result> doInBackground() {
+                // Always headless (#149): watching N browser windows open one after another
+                // for a multi-profile batch isn't a usable experience the "Show browser"
+                // checkbox was ever designed for - that's a single-profile debugging aid. This
+                // also means batch refresh always gets the shared-login grouping optimization
+                // (see BatchRefreshRunner.run()), which showBrowser=true used to disable too.
                 return batchRefreshRunner.run(
                     targets,
-                    showBrowserCheckBox.isSelected(),
+                    false,
                     () -> credentialRequestCancelledByUser,
                     authenticator -> activeAuthenticator = authenticator,
                     this::publish
