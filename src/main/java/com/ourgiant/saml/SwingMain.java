@@ -830,8 +830,18 @@ public class SwingMain extends JFrame {
                 return allowedStatuses.contains(entry.getStringValue(1));
             }
         });
+        RowFilter<Object, Object> statusAndTextFilter = RowFilter.andFilter(filters);
 
-        tokenStatusRowSorter.setRowFilter(RowFilter.andFilter(filters));
+        // Pinning is meant to keep favorites within easy reach regardless of how the rest of
+        // the list is being filtered (#147), so a pinned profile bypasses both the text and
+        // status filters above rather than being subject to them like any other row.
+        RowFilter<Object, Object> pinnedOrFiltered = new RowFilter<>() {
+            @Override
+            public boolean include(Entry<?, ?> entry) {
+                return pinnedProfileOrder.contains(entry.getStringValue(0)) || statusAndTextFilter.include(entry);
+            }
+        };
+        tokenStatusRowSorter.setRowFilter(pinnedOrFiltered);
     }
 
     private int getStatusOrder(String status) {
