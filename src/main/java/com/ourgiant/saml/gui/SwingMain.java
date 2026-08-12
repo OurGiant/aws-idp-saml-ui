@@ -10,7 +10,6 @@ import com.ourgiant.saml.core.DatabaseManager;
 import com.ourgiant.saml.core.PasswordManager;
 import com.ourgiant.saml.core.SamlAuthenticator;
 import com.ourgiant.saml.core.TokenStateManager;
-import com.ourgiant.saml.util.JsonUtil;
 
 import com.formdev.flatlaf.FlatLaf;
 import org.slf4j.Logger;
@@ -37,15 +36,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
@@ -391,149 +387,21 @@ public class SwingMain extends JFrame {
     }
 
     private void showAboutDialog() {
-        showAboutDialog(null);
-    }
-
-    /**
-     * @param knownNewerRelease if non-null (tagName-or-version, releaseUrl), an already-confirmed newer
-     *                          release to render immediately instead of performing a live GitHub check —
-     *                          used when the silent startup check already found and confirmed an update.
-     *                          That silent path also makes the dialog non-modal, so an update found in
-     *                          the background never blocks the main window; Help > About (a deliberate
-     *                          click) stays modal, the normal expectation for that kind of dialog.
-     */
-    private void showAboutDialog(String[] knownNewerRelease) {
-        final String currentVersion = resolveCurrentVersion();
-        final boolean modal = knownNewerRelease == null;
-
-        JDialog dialog = new JDialog(this, "About AWS IDP SAML UI", modal);
-        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
-
-        JLabel nameLabel = new JLabel("AWS IDP SAML UI");
-        nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 16f));
-        nameLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JLabel versionLabel = new JLabel("Version " + currentVersion);
-        versionLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JLabel descLabel = new JLabel("AWS SAML authentication client");
-        descLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JLabel copyrightLabel = new JLabel("© OurGiant");
-        copyrightLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JLabel updateLabel = new JLabel(knownNewerRelease != null ? "" : "Checking for updates...");
-        updateLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        updateLabel.setForeground(Color.GRAY);
-
-        panel.add(nameLabel);
-        panel.add(Box.createVerticalStrut(8));
-        panel.add(versionLabel);
-        panel.add(Box.createVerticalStrut(4));
-        panel.add(descLabel);
-        panel.add(Box.createVerticalStrut(8));
-        panel.add(copyrightLabel);
-        panel.add(Box.createVerticalStrut(8));
-        panel.add(updateLabel);
-        panel.add(Box.createVerticalStrut(12));
-
-        JButton closeButton = new JButton("Close");
-        closeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        closeButton.addActionListener(e -> dialog.dispose());
-        panel.add(closeButton);
-
-        if (knownNewerRelease != null) {
-            applyUpdateAvailableLabel(updateLabel, knownNewerRelease[0], knownNewerRelease[1]);
-        } else {
-            SwingWorker<String[], Void> versionChecker = new SwingWorker<>() {
-                @Override
-                protected String[] doInBackground() {
-                    return fetchLatestRelease();
-                }
-
-                @Override
-                protected void done() {
-                    try {
-                        String[] release = get();
-                        if (release != null) {
-                            String latestTag = release[0];
-                            String releaseUrl = release[1];
-                            String latestVersion = latestTag.startsWith("v") ? latestTag.substring(1) : latestTag;
-                            if (isNewerVersion(latestVersion, currentVersion)) {
-                                applyUpdateAvailableLabel(updateLabel, latestVersion, releaseUrl);
-                            } else {
-                                updateLabel.setText("Up to date");
-                                updateLabel.setForeground(new Color(0, 128, 0));
-                            }
-                        } else {
-                            updateLabel.setText("Could not check for updates");
-                        }
-                    } catch (Exception e) {
-                        Throwable cause = e.getCause();
-                        updateLabel.setText(cause instanceof UpdateFetchSslException sslEx
-                            ? sslEx.getMessage() : "Could not check for updates");
-                        logger.debug("Version check failed", e);
-                    }
-                    panel.revalidate();
-                    panel.repaint();
-                }
-            };
-            versionChecker.execute();
-        }
-
-        dialog.getContentPane().add(panel);
-        dialog.getRootPane().setDefaultButton(closeButton);
-        dialog.pack();
-        dialog.setLocationRelativeTo(this);
-        dialog.setVisible(true);
-    }
-
-    private void applyUpdateAvailableLabel(JLabel updateLabel, String latestVersion, String releaseUrl) {
-        updateLabel.setText("<html><a href=''>Version " + latestVersion + " available — click to download</a></html>");
-        updateLabel.setForeground(new Color(0, 102, 204));
-        updateLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        updateLabel.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent e) {
-                try {
-                    java.net.URI uri = new java.net.URI(releaseUrl);
-                    if (!isTrustedReleaseUrl(uri)) {
-                        logger.warn("Refusing to open untrusted release URL: {}", releaseUrl);
-                        return;
-                    }
-                    Desktop.getDesktop().browse(uri);
-                } catch (Exception ex) {
-                    logger.warn("Could not open release URL in browser", ex);
-                }
-            }
-        });
-    }
-
-    /**
-     * Defense in depth, not a response to a live exploit: {@code uri} comes straight from
-     * GitHub's releases API response, so a tampered response (only possible with an existing
-     * TLS MITM position) could otherwise point this at an arbitrary URI/scheme. Restrict to
-     * exactly the host the API is expected to point back to.
-     */
-    static boolean isTrustedReleaseUrl(java.net.URI uri) {
-        return "https".equalsIgnoreCase(uri.getScheme()) && "github.com".equalsIgnoreCase(uri.getHost());
+        new AboutDialog(this).setVisible(true);
     }
 
     /**
      * Silently checks for a newer release in the background. Does nothing if up to date or if the
      * check fails (offline, rate-limited, etc.) — failures are only logged at debug level, matching
-     * fetchLatestRelease()'s own convention. If a newer version is found that hasn't already been
-     * auto-surfaced, opens the About dialog pre-populated with that result (no redundant re-fetch).
+     * AboutDialog.fetchLatestRelease()'s own convention. If a newer version is found that hasn't
+     * already been auto-surfaced, opens the About dialog pre-populated with that result (no
+     * redundant re-fetch).
      */
     private void checkForUpdatesInBackground() {
         SwingWorker<String[], Void> worker = new SwingWorker<>() {
             @Override
             protected String[] doInBackground() {
-                return fetchLatestRelease();
+                return AboutDialog.fetchLatestRelease();
             }
 
             @Override
@@ -546,97 +414,21 @@ public class SwingMain extends JFrame {
                     String latestTag = release[0];
                     String releaseUrl = release[1];
                     String latestVersion = latestTag.startsWith("v") ? latestTag.substring(1) : latestTag;
-                    String currentVersion = resolveCurrentVersion();
-                    if (!isNewerVersion(latestVersion, currentVersion)) {
+                    String currentVersion = AboutDialog.resolveCurrentVersion();
+                    if (!AboutDialog.isNewerVersion(latestVersion, currentVersion)) {
                         return;
                     }
                     if (latestVersion.equals(databaseManager.getLastNotifiedUpdateVersion())) {
                         return;
                     }
                     databaseManager.setLastNotifiedUpdateVersion(latestVersion);
-                    showAboutDialog(new String[]{latestVersion, releaseUrl});
+                    new AboutDialog(SwingMain.this, new String[]{latestVersion, releaseUrl}).setVisible(true);
                 } catch (Exception e) {
                     logger.debug("Silent update check failed", e);
                 }
             }
         };
         worker.execute();
-    }
-
-    private String resolveCurrentVersion() {
-        String version = getClass().getPackage() != null ? getClass().getPackage().getImplementationVersion() : null;
-        if (version == null) {
-            version = readVersionFromPropertiesResource();
-        }
-        return version != null ? version : "unknown";
-    }
-
-    private String readVersionFromPropertiesResource() {
-        try (InputStream in = getClass().getResourceAsStream("/version.properties")) {
-            if (in != null) {
-                Properties props = new Properties();
-                props.load(in);
-                return props.getProperty("version");
-            }
-        } catch (IOException e) {
-            logger.debug("Could not read version.properties", e);
-        }
-        return null;
-    }
-
-    private String[] fetchLatestRelease() {
-        try {
-            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(5))
-                    .build();
-            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                    .uri(java.net.URI.create("https://api.github.com/repos/OurGiant/aws-idp-saml-ui/releases/latest"))
-                    .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", "aws-idp-saml-ui")
-                    .timeout(Duration.ofSeconds(10))
-                    .build();
-            java.net.http.HttpResponse<String> response = client.send(request,
-                    java.net.http.HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                String body = response.body();
-                String tagName = JsonUtil.extractJsonString(body, "tag_name");
-                String htmlUrl = JsonUtil.extractJsonString(body, "html_url");
-                if (tagName != null && htmlUrl != null) {
-                    return new String[]{tagName, htmlUrl};
-                }
-            }
-        } catch (javax.net.ssl.SSLHandshakeException e) {
-            logger.warn("TLS handshake failed fetching latest release from GitHub (possible TLS-inspecting proxy)", e);
-            throw new UpdateFetchSslException(
-                "Couldn't verify the secure connection (possible corporate network proxy)", e);
-        } catch (Exception e) {
-            logger.debug("Failed to fetch latest release from GitHub", e);
-        }
-        return null;
-    }
-
-    /** Lets the update-check UI distinguish "TLS handshake failed" from any other fetch failure. */
-    private static class UpdateFetchSslException extends RuntimeException {
-        UpdateFetchSslException(String message, Throwable cause) {
-            super(message, cause);
-        }
-    }
-
-    static boolean isNewerVersion(String latest, String current) {
-        try {
-            String[] latestParts = latest.split("\\.");
-            String[] currentParts = current.split("\\.");
-            int len = Math.max(latestParts.length, currentParts.length);
-            for (int i = 0; i < len; i++) {
-                int l = i < latestParts.length ? Integer.parseInt(latestParts[i]) : 0;
-                int c = i < currentParts.length ? Integer.parseInt(currentParts[i]) : 0;
-                if (l > c) return true;
-                if (l < c) return false;
-            }
-        } catch (NumberFormatException e) {
-            logger.debug("Could not compare versions: {} vs {}", latest, current);
-        }
-        return false;
     }
 
     private void setWindowIcon() {

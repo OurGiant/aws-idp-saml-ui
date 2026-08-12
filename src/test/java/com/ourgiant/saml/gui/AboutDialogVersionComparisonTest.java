@@ -6,7 +6,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class SwingMainVersionComparisonTest {
+class AboutDialogVersionComparisonTest {
 
     @ParameterizedTest
     @CsvSource({
@@ -17,7 +17,7 @@ class SwingMainVersionComparisonTest {
             "1.0.0.1, 1.0.0"
     })
     void isNewerVersion_returnsTrueWhenLatestIsGreater(String latest, String current) {
-        assertTrue(SwingMain.isNewerVersion(latest, current));
+        assertTrue(AboutDialog.isNewerVersion(latest, current));
     }
 
     @ParameterizedTest
@@ -29,7 +29,7 @@ class SwingMainVersionComparisonTest {
             "1.0.0, 1.0.0.1"
     })
     void isNewerVersion_returnsFalseWhenLatestIsNotGreater(String latest, String current) {
-        assertFalse(SwingMain.isNewerVersion(latest, current));
+        assertFalse(AboutDialog.isNewerVersion(latest, current));
     }
 
     @ParameterizedTest
@@ -38,6 +38,6 @@ class SwingMainVersionComparisonTest {
             "1.0.9, not-a-version"
     })
     void isNewerVersion_returnsFalseOnUnparsableInput(String latest, String current) {
-        assertFalse(SwingMain.isNewerVersion(latest, current));
+        assertFalse(AboutDialog.isNewerVersion(latest, current));
     }
 }
