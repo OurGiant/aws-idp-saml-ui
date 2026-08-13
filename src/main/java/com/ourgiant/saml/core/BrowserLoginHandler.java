@@ -30,6 +30,12 @@ public class BrowserLoginHandler {
 
     private static final Duration MAIN_WAIT_TIMEOUT = Duration.ofSeconds(60);
 
+    private static final String MFA_SCREEN_INDICATOR = "class=\"button select-factor link-button\"";
+    private static final Duration MFA_SCREEN_POLL_TIMEOUT = Duration.ofSeconds(20);
+    private static final Duration BACKOFF_INITIAL_DELAY = Duration.ofSeconds(1);
+    private static final Duration BACKOFF_MAX_DELAY = Duration.ofSeconds(4);
+    private static final double BACKOFF_FACTOR = 2.0;
+
     private final WebDriver driver;
     private final WebDriverWait wait;
     private final boolean useOktaFastPass;
@@ -281,11 +287,51 @@ public class BrowserLoginHandler {
         try {
             WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(10));
             until(shortWait, ExpectedConditions.presenceOfElementLocated(By.linkText("Back to sign in")));
-            String pageSource = driver.getPageSource();
-            boolean hasMfaIndicator = pageSource.contains("class=\"button select-factor link-button\"");
-            return hasMfaIndicator;
         } catch (TimeoutException e) {
             return false;
+        }
+        return pollPageSourceWithBackoff(MFA_SCREEN_INDICATOR, MFA_SCREEN_POLL_TIMEOUT);
+    }
+
+    /**
+     * Polls the page source for a substring, backing off exponentially between attempts instead of
+     * checking once immediately. Okta's factor-selection markup can render after the "Back to sign
+     * in" link is already present in the DOM — especially on Firefox — so a one-shot check right
+     * after that wait resolves can miss it, while a slow-rendering page still finishes well within
+     * this method's own deadline. Ported from the Python sibling's
+     * {@code SeleniumHelper.poll_page_source_with_backoff} (aws-idp-saml #83).
+     */
+    private boolean pollPageSourceWithBackoff(String needle, Duration maxTotalDuration) {
+        return pollPageSourceWithBackoff(needle, maxTotalDuration, BACKOFF_INITIAL_DELAY, BACKOFF_MAX_DELAY, BACKOFF_FACTOR);
+    }
+
+    /** Package-private so the backoff timing itself can be unit tested with millisecond-scale durations. */
+    boolean pollPageSourceWithBackoff(String needle, Duration maxTotalDuration,
+                                       Duration initialDelay, Duration maxDelay, double backoffFactor) {
+        long deadline = System.currentTimeMillis() + maxTotalDuration.toMillis();
+        long delayMillis = initialDelay.toMillis();
+        int attempt = 0;
+        while (true) {
+            attempt++;
+            if (cancelled.getAsBoolean()) {
+                throw new CancellationException("Login cancelled");
+            }
+            if (driver.getPageSource().contains(needle)) {
+                logger.debug("Found '{}' in page source on attempt {}", needle, attempt);
+                return true;
+            }
+            long remainingMillis = deadline - System.currentTimeMillis();
+            if (remainingMillis <= 0) {
+                logger.info("Timed out waiting for '{}' in page source after {} attempts", needle, attempt);
+                return false;
+            }
+            try {
+                Thread.sleep(Math.min(delayMillis, remainingMillis));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+            delayMillis = Math.min((long) (delayMillis * backoffFactor), maxDelay.toMillis());
         }
     }
 
