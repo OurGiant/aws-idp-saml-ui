@@ -10,8 +10,10 @@ import com.ourgiant.saml.core.DatabaseManager;
 import com.ourgiant.saml.core.PasswordManager;
 import com.ourgiant.saml.core.SamlAuthenticator;
 import com.ourgiant.saml.core.TokenStateManager;
+import com.ourgiant.saml.core.WebDriverFactory;
 
 import com.formdev.flatlaf.FlatLaf;
+import org.openqa.selenium.WebDriver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +39,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -92,6 +95,12 @@ public class SwingMain extends JFrame {
     private PasswordManager passwordManager;
     private BatchRefreshRunner batchRefreshRunner;
 
+    // Ephemeral, cookie-isolated browser windows opened by "Open Console" (see #169). Tracked
+    // so a JVM shutdown hook can quit() them: without it, EXIT_ON_CLOSE (no tray icon) and other
+    // exit paths bypass exitApplication() entirely and would leak orphaned chromedriver/
+    // geckodriver processes, the same failure mode already fixed once for the login flow (#84).
+    private final List<WebDriver> openConsoleDrivers = Collections.synchronizedList(new ArrayList<>());
+
     public SwingMain() {
         configManager = new ConfigManager();
         credentialManager = new CredentialManager();
@@ -99,6 +108,8 @@ public class SwingMain extends JFrame {
         databaseManager = new DatabaseManager();
         passwordManager = new PasswordManager(databaseManager);
         batchRefreshRunner = new BatchRefreshRunner(configManager, credentialManager, passwordManager, databaseManager);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(this::quitOpenConsoleDrivers, "console-driver-cleanup"));
 
         // Set theme
         setLookAndFeel();
@@ -524,6 +535,19 @@ public class SwingMain extends JFrame {
             SystemTray.getSystemTray().remove(trayIcon);
         }
         System.exit(0);
+    }
+
+    private void quitOpenConsoleDrivers() {
+        synchronized (openConsoleDrivers) {
+            for (WebDriver driver : openConsoleDrivers) {
+                try {
+                    driver.quit();
+                } catch (Exception e) {
+                    logger.warn("Failed to close a console browser window on shutdown", e);
+                }
+            }
+            openConsoleDrivers.clear();
+        }
     }
 
     private void startStatusPolling() {
@@ -1363,10 +1387,23 @@ public class SwingMain extends JFrame {
         openConsoleButton.setText("Opening...");
         statusLabel.setText("Opening AWS Console for profile: " + selectedProfile + "...");
 
-        SwingWorker<String, Void> worker = new SwingWorker<>() {
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
             @Override
-            protected String doInBackground() throws Exception {
-                return AwsConsoleLauncher.buildLoginUrl(credentials);
+            protected Void doInBackground() throws Exception {
+                String loginUrl = AwsConsoleLauncher.buildLoginUrl(credentials);
+
+                // A fresh WebDriver per click gives this console session its own cookie jar,
+                // so it doesn't collide with sessions already open for other profiles (#169).
+                WebDriver driver = WebDriverFactory.createWebDriver(configManager.getBrowserType(), true);
+                openConsoleDrivers.add(driver);
+                try {
+                    driver.get(loginUrl);
+                } catch (Exception e) {
+                    openConsoleDrivers.remove(driver);
+                    driver.quit();
+                    throw e;
+                }
+                return null;
             }
 
             @Override
@@ -1375,8 +1412,7 @@ public class SwingMain extends JFrame {
                 openConsoleButton.setText("Open Console");
 
                 try {
-                    String loginUrl = get();
-                    Desktop.getDesktop().browse(new java.net.URI(loginUrl));
+                    get();
                     statusLabel.setText("Opened AWS Console for profile: " + selectedProfile);
                 } catch (Exception ex) {
                     statusLabel.setText("Failed to open AWS Console: " + ex.getMessage());

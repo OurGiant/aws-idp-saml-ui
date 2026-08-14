@@ -1,10 +1,6 @@
 package com.ourgiant.saml.core;
 
 import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.chrome.ChromeDriver;
-import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.firefox.FirefoxDriver;
-import org.openqa.selenium.firefox.FirefoxOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
@@ -176,36 +172,7 @@ public class SamlAuthenticator {
      * Create WebDriver instance based on configuration
      */
     private WebDriver createWebDriver(boolean showBrowser) {
-        String browserType = configManager.getBrowserType().toLowerCase();
-
-        switch (browserType) {
-            case "firefox":
-                return createFirefoxDriver(showBrowser);
-            case "chrome":
-            default:
-                return createChromeDriver(showBrowser);
-        }
-    }
-
-    private WebDriver createChromeDriver(boolean showBrowser) {
-        ChromeOptions options = new ChromeOptions();
-        System.setProperty("webdriver.manager.stats", "false");
-        if (!showBrowser) {
-            options.addArguments("--headless");
-        }
-        options.addArguments("--disable-dev-shm-usage");
-
-        return new ChromeDriver(options);
-    }
-
-    private WebDriver createFirefoxDriver(boolean showBrowser) {
-        FirefoxOptions options = new FirefoxOptions();
-        if (!showBrowser) {
-            options.addArguments("--headless");
-        }
-        System.setProperty("webdriver.manager.stats", "false");
-
-        return new FirefoxDriver(options);
+        return WebDriverFactory.createWebDriver(configManager.getBrowserType(), showBrowser);
     }
 
     /**
