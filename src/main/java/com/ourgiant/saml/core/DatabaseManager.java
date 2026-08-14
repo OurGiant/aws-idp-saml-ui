@@ -212,6 +212,15 @@ public class DatabaseManager {
         setConfig("tray_notifications_enabled", String.valueOf(enabled));
     }
 
+    public boolean getAutoRenewPinnedProfilesEnabled() {
+        String value = getConfig("auto_renew_pinned_profiles_enabled");
+        return "true".equalsIgnoreCase(value); // Disabled by default -- opt in before the app starts unattended browser logins
+    }
+
+    public void setAutoRenewPinnedProfilesEnabled(boolean enabled) {
+        setConfig("auto_renew_pinned_profiles_enabled", String.valueOf(enabled));
+    }
+
     // Intentionally not seeded in insertDefaultConfig(): an absent value lets
     // ConfigManager.getBrowserType() fall back to the samlsts "browser" key
     // (set during first-run setup) until the user explicitly saves a choice here.

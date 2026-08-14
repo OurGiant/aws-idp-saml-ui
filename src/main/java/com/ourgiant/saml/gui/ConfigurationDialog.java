@@ -34,6 +34,7 @@ public class ConfigurationDialog extends JDialog {
     private JComboBox<String> browserComboBox;
     private JCheckBox useFastPassCheckBox;
     private JCheckBox trayNotificationsCheckBox;
+    private JCheckBox autoRenewPinnedProfilesCheckBox;
     private JCheckBox startMinimizedCheckBox;
     private JButton forceRefreshButton;
     private JButton saveButton;
@@ -202,6 +203,16 @@ public class ConfigurationDialog extends JDialog {
             : "System tray is not available on this platform/environment");
         panel.add(trayNotificationsCheckBox, gbc);
 
+        gbc.gridy = 1;
+        autoRenewPinnedProfilesCheckBox = new JCheckBox("Automatically renew pinned profiles when expiring");
+        autoRenewPinnedProfilesCheckBox.setMnemonic(KeyEvent.VK_R);
+        autoRenewPinnedProfilesCheckBox.setToolTipText(
+            "Silently refresh pinned profiles' credentials via headless browser login once they're expired "
+                + "or expiring soon, without waiting for you to ask. A tray notification announces each "
+                + "renewal attempt; profiles that need an interactive login step (e.g. MFA) will keep "
+                + "failing until refreshed manually.");
+        panel.add(autoRenewPinnedProfilesCheckBox, gbc);
+
         return panel;
     }
 
@@ -313,6 +324,8 @@ public class ConfigurationDialog extends JDialog {
 
         trayNotificationsCheckBox.setSelected(databaseManager.getTrayNotificationsEnabled());
 
+        autoRenewPinnedProfilesCheckBox.setSelected(databaseManager.getAutoRenewPinnedProfilesEnabled());
+
         startMinimizedCheckBox.setSelected(databaseManager.getStartMinimizedToTray());
 
         updatePasswordExpirationEnabled();
@@ -344,11 +357,14 @@ public class ConfigurationDialog extends JDialog {
                 boolean trayNotificationsEnabled = trayNotificationsCheckBox.isSelected();
                 databaseManager.setTrayNotificationsEnabled(trayNotificationsEnabled);
 
+                boolean autoRenewPinnedProfiles = autoRenewPinnedProfilesCheckBox.isSelected();
+                databaseManager.setAutoRenewPinnedProfilesEnabled(autoRenewPinnedProfiles);
+
                 boolean startMinimized = startMinimizedCheckBox.isSelected();
                 databaseManager.setStartMinimizedToTray(startMinimized);
 
-                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}, tray_notifications = {}, start_minimized_to_tray = {}",
-                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass, trayNotificationsEnabled, startMinimized);
+                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}, tray_notifications = {}, auto_renew_pinned_profiles = {}, start_minimized_to_tray = {}",
+                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass, trayNotificationsEnabled, autoRenewPinnedProfiles, startMinimized);
 
                 // Apply theme immediately — ThemeManager refreshes all open windows,
                 // including this dialog, so it re-themes live.
