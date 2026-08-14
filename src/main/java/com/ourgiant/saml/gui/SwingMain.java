@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Main Swing application for AWS SAML authentication
@@ -55,6 +56,11 @@ import java.util.regex.Pattern;
 public class SwingMain extends JFrame {
     private static final Logger logger = LoggerFactory.getLogger(SwingMain.class);
     private static final Duration EXPIRY_WARNING_THRESHOLD = Duration.ofMinutes(5);
+    // How long to wait before retrying an auto-renew attempt for the same pinned profile after
+    // one fails (e.g. it needs an interactive MFA step auto-renew can't complete headlessly) --
+    // without this, a profile stuck in that state would be retried every statusRefreshTimer
+    // tick (30s), hammering the SSO provider indefinitely.
+    private static final Duration AUTO_RENEW_RETRY_COOLDOWN = Duration.ofMinutes(5);
 
     private JComboBox<String> profileComboBox;
     private JCheckBox showBrowserCheckBox;
@@ -85,6 +91,7 @@ public class SwingMain extends JFrame {
 
     private TrayIcon trayIcon;
     private final Map<String, Instant> lastNotifiedExpiration = new HashMap<>();
+    private final Map<String, Instant> lastAutoRenewAttempt = new HashMap<>();
     private final Set<String> expiringSoonProfiles = new HashSet<>();
     private final List<String> pinnedProfileOrder = new ArrayList<>();
 
@@ -649,6 +656,8 @@ public class SwingMain extends JFrame {
             if (!credentialRequestInProgress) {
                 statusLabel.setText("Status refreshed.");
             }
+
+            maybeAutoRenewPinnedProfiles();
         } catch (Exception e) {
             if (!credentialRequestInProgress) {
                 statusLabel.setText("Failed to update status table: " + e.getMessage());
@@ -901,6 +910,73 @@ public class SwingMain extends JFrame {
     }
 
     /**
+     * Silently kicks off a headless refresh for pinned profiles that are expired or expiring
+     * soon, when the user has opted into "auto-renew pinned profiles" (#173). Runs from the
+     * same status-polling tick that already computes expiringSoonProfiles, rather than a
+     * separate timer. Unlike the menu-driven batch-refresh actions, this never prompts for
+     * confirmation and never pops a completion dialog — it's a background timer tick, and an
+     * unattended modal dialog would be disruptive — so a tray notification announces the
+     * kickoff instead, and failures are reported the same way rather than silently swallowed.
+     */
+    private void maybeAutoRenewPinnedProfiles() {
+        if (!databaseManager.getAutoRenewPinnedProfilesEnabled() || credentialRequestInProgress) {
+            return;
+        }
+
+        Set<String> pinnedDueProfiles = new HashSet<>();
+        for (int row = 0; row < tokenStatusTableModel.getRowCount(); row++) {
+            String profile = (String) tokenStatusTableModel.getValueAt(row, 0);
+            String status = (String) tokenStatusTableModel.getValueAt(row, 1);
+            if (pinnedProfileOrder.contains(profile) && ("EXPIRED".equals(status) || expiringSoonProfiles.contains(profile))) {
+                pinnedDueProfiles.add(profile);
+            }
+        }
+
+        // A pinned profile that's no longer due (renewed, unpinned, or removed) starts with a
+        // fresh retry budget the next time it becomes due, rather than inheriting a stale cooldown.
+        lastAutoRenewAttempt.keySet().retainAll(pinnedDueProfiles);
+
+        Instant now = Instant.now();
+        List<String> targets = new ArrayList<>();
+        for (String profile : pinnedDueProfiles) {
+            Instant lastAttempt = lastAutoRenewAttempt.get(profile);
+            if (lastAttempt == null || Duration.between(lastAttempt, now).compareTo(AUTO_RENEW_RETRY_COOLDOWN) >= 0) {
+                targets.add(profile);
+            }
+        }
+
+        if (targets.isEmpty()) {
+            return;
+        }
+
+        for (String profile : targets) {
+            lastAutoRenewAttempt.put(profile, now);
+        }
+
+        if (trayIcon != null && databaseManager.getTrayNotificationsEnabled()) {
+            trayIcon.displayMessage(
+                "Auto-renewing pinned profile(s)",
+                "Starting credential renewal for: " + String.join(", ", targets),
+                TrayIcon.MessageType.INFO
+            );
+        }
+
+        startBatchRefresh(targets, false);
+    }
+
+    private void notifyAutoRenewFailures(List<BatchRefreshRunner.Result> failures) {
+        if (trayIcon == null || !databaseManager.getTrayNotificationsEnabled()) {
+            return;
+        }
+        String profiles = failures.stream().map(BatchRefreshRunner.Result::profile).collect(Collectors.joining(", "));
+        trayIcon.displayMessage(
+            "Auto-renew failed",
+            "Could not renew: " + profiles + ". Refresh manually when convenient.",
+            TrayIcon.MessageType.ERROR
+        );
+    }
+
+    /**
      * Refreshes exactly the profile(s) currently selected in the status table, regardless of
      * their current status (#127) — e.g. proactively refreshing a still-valid profile before a
      * work session is a legitimate reason to select it, not just expired/expiring ones.
@@ -967,6 +1043,17 @@ public class SwingMain extends JFrame {
             return;
         }
 
+        startBatchRefresh(targets, true);
+    }
+
+    /**
+     * Shared by the interactive batch-refresh actions (which have already confirmed with the
+     * user and want a completion summary dialog) and the silent auto-renew-pinned-profiles
+     * check (which never prompts and only ever surfaces a tray notification, see
+     * maybeAutoRenewPinnedProfiles()) — drives the actual SwingWorker/BatchRefreshRunner
+     * execution and the busy UI state shared with the single-profile request flow.
+     */
+    private void startBatchRefresh(List<String> targets, boolean interactive) {
         batchRefreshMenuItem.setEnabled(false);
         refreshSelectedMenuItem.setEnabled(false);
         batchCancelButton.setVisible(true);
@@ -1035,29 +1122,38 @@ public class SwingMain extends JFrame {
                         "Batch refresh complete: %d succeeded, %d failed.", succeeded, failures.size()));
                 }
 
-                if (failures.isEmpty() && !cancelled) {
-                    JOptionPane.showMessageDialog(SwingMain.this,
-                        "Refreshed " + succeeded + " profile(s) successfully.",
-                        "Batch Refresh Complete",
-                        JOptionPane.INFORMATION_MESSAGE);
-                } else {
-                    StringBuilder detail = new StringBuilder();
-                    detail.append(succeeded).append(" succeeded, ").append(failures.size()).append(" failed");
-                    if (cancelled) {
-                        detail.append(", ").append(notAttempted).append(" not attempted (cancelled)");
-                    }
-                    detail.append(".\n");
-                    for (BatchRefreshRunner.Result r : failures) {
-                        detail.append("\n- ").append(r.profile()).append(": ").append(r.detail());
-                    }
-                    JOptionPane.showMessageDialog(SwingMain.this,
-                        scrollableMessage(detail.toString()),
-                        cancelled ? "Batch Refresh Cancelled" : "Batch Refresh Complete With Errors",
-                        JOptionPane.WARNING_MESSAGE);
+                if (interactive) {
+                    showBatchRefreshCompletionDialog(succeeded, failures, cancelled, notAttempted);
+                } else if (!failures.isEmpty()) {
+                    notifyAutoRenewFailures(failures);
                 }
             }
         };
         worker.execute();
+    }
+
+    private void showBatchRefreshCompletionDialog(long succeeded, List<BatchRefreshRunner.Result> failures,
+                                                    boolean cancelled, int notAttempted) {
+        if (failures.isEmpty() && !cancelled) {
+            JOptionPane.showMessageDialog(SwingMain.this,
+                "Refreshed " + succeeded + " profile(s) successfully.",
+                "Batch Refresh Complete",
+                JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            StringBuilder detail = new StringBuilder();
+            detail.append(succeeded).append(" succeeded, ").append(failures.size()).append(" failed");
+            if (cancelled) {
+                detail.append(", ").append(notAttempted).append(" not attempted (cancelled)");
+            }
+            detail.append(".\n");
+            for (BatchRefreshRunner.Result r : failures) {
+                detail.append("\n- ").append(r.profile()).append(": ").append(r.detail());
+            }
+            JOptionPane.showMessageDialog(SwingMain.this,
+                scrollableMessage(detail.toString()),
+                cancelled ? "Batch Refresh Cancelled" : "Batch Refresh Complete With Errors",
+                JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     private void showCredentialErrorDialog(String selectedProfile, CredentialRequestError error) {
