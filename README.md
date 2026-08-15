@@ -272,6 +272,7 @@ MIT — see [LICENSE](LICENSE) for details.
 
 ## Troubleshooting
 
+- If login fails with "Your Okta password needs to be reset before you can sign in", your IdP is forcing a password reset — log in to Okta via your browser to complete the reset, then try again
 - Ensure Java 24 is installed and `JAVA_HOME` is set correctly (not needed when using a platform installer)
 - Check browser compatibility for Selenium WebDriver (Chrome or Firefox)
 - Verify your `samlsts` configuration and SAML provider settings via the Configuration/Profile Manager dialogs
