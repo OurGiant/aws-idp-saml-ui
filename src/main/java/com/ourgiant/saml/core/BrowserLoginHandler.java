@@ -36,6 +36,14 @@ public class BrowserLoginHandler {
     private static final Duration BACKOFF_MAX_DELAY = Duration.ofSeconds(4);
     private static final double BACKOFF_FACTOR = 2.0;
 
+    // Okta's i18n key for this screen's heading (login.reset.password.headline / similar) renders
+    // as this exact string on both the default hosted widget and custom SIW-based embedded flows
+    // (#172), so it's a more stable signal than guessing at form/field markup we haven't observed
+    // in this app's own driver yet. If this ever needs replacing, a real occurrence should now get
+    // captured by captureFailureScreenshot() before the login times out below.
+    private static final String FORCED_PASSWORD_RESET_INDICATOR = "Reset your Okta password";
+    private static final Duration FORCED_PASSWORD_RESET_POLL_TIMEOUT = Duration.ofSeconds(5);
+
     private final WebDriver driver;
     private final WebDriverWait wait;
     private final boolean useOktaFastPass;
@@ -238,6 +246,13 @@ public class BrowserLoginHandler {
             throw e;
         }
 
+        statusCallback.accept("Checking for forced Okta password-reset screen...");
+        if (isForcedPasswordResetScreen()) {
+            logger.warn("Detected forced Okta password-reset screen after primary authentication");
+            throw new RuntimeException("Your Okta password needs to be reset before you can sign in. "
+                + "Please log in to Okta via your browser to reset it, then try again.");
+        }
+
         if (useOktaFastPass) {
             statusCallback.accept("Selecting Okta FastPass...");
             clickOktaFastPassSelection();
@@ -269,6 +284,16 @@ public class BrowserLoginHandler {
             logger.warn("Error while checking for intermediate verification page", e);
             return false;
         }
+    }
+
+    /**
+     * Detects Okta's forced "Reset your Okta password" interstitial, which some password
+     * policies substitute for the MFA screen right after primary authentication succeeds (#172).
+     * Unlike {@link #isPreAuthenticatedOktaMfaScreen()}, there's no known gating element to check
+     * first, so this polls the page source directly for the screen's heading text.
+     */
+    private boolean isForcedPasswordResetScreen() {
+        return pollPageSourceWithBackoff(FORCED_PASSWORD_RESET_INDICATOR, FORCED_PASSWORD_RESET_POLL_TIMEOUT);
     }
 
     private void clickUsePassword() {

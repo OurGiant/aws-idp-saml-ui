@@ -61,6 +61,34 @@ class BrowserLoginHandlerBackoffPollTest {
     }
 
     @Test
+    void detectsForcedPasswordResetScreenByHeadingText() {
+        WebDriver driver = mock(WebDriver.class);
+        when(driver.getPageSource()).thenReturn(
+            "<html><body><h1>Reset your Okta password</h1>"
+            + "<input name=\"newPassword\"/><input name=\"confirmPassword\"/>"
+            + "<button>Reset Password</button></body></html>");
+        BrowserLoginHandler handler = newHandler(driver, () -> false);
+
+        boolean found = handler.pollPageSourceWithBackoff("Reset your Okta password", Duration.ofSeconds(5),
+            TINY_DELAY, TINY_DELAY, 2.0);
+
+        assertTrue(found);
+    }
+
+    @Test
+    void doesNotMistakeMfaSelectionScreenForPasswordReset() {
+        WebDriver driver = mock(WebDriver.class);
+        when(driver.getPageSource()).thenReturn(
+            "<html><body><a class=\"button select-factor link-button\">Select Okta Verify.</a></body></html>");
+        BrowserLoginHandler handler = newHandler(driver, () -> false);
+
+        boolean found = handler.pollPageSourceWithBackoff("Reset your Okta password", Duration.ofMillis(30),
+            TINY_DELAY, TINY_DELAY, 2.0);
+
+        assertFalse(found);
+    }
+
+    @Test
     void throwsCancellationExceptionWhenCancelledBeforeAMatch() {
         WebDriver driver = mock(WebDriver.class);
         when(driver.getPageSource()).thenReturn("<html>nope</html>");
