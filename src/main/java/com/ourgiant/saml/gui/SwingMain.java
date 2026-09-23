@@ -200,7 +200,7 @@ public class SwingMain extends JFrame {
         JPanel tokenStatusPanel = new JPanel(new BorderLayout());
         tokenStatusPanel.setBorder(BorderFactory.createTitledBorder("Credential Status"));
 
-        tokenStatusTableModel = new DefaultTableModel(new String[]{"Profile", "Status", "Expires At", "Time Remaining"}, 0) {
+        tokenStatusTableModel = new DefaultTableModel(new String[]{"Profile", "Account Number", "Status", "Expires At", "Time Remaining"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
@@ -606,6 +606,10 @@ public class SwingMain extends JFrame {
             Instant now = Instant.now();
 
             for (String profile : profileSet) {
+                String accountNumber = configManager.getAccountNumber(profile);
+                if (accountNumber == null || accountNumber.isBlank()) {
+                    accountNumber = "N/A";
+                }
                 Instant expiration = tokenStateManager.getExpiration(profile);
                 String status;
                 String expiresAtText;
@@ -630,7 +634,7 @@ public class SwingMain extends JFrame {
                     timeRemaining = "Expired";
                 }
 
-                rows.add(new TokenStatusRow(profile, status, expiresAtText, timeRemaining));
+                rows.add(new TokenStatusRow(profile, accountNumber, status, expiresAtText, timeRemaining));
             }
 
             // Pinned profiles sort to the top in their persisted order; everything else falls
@@ -649,7 +653,7 @@ public class SwingMain extends JFrame {
             });
 
             for (TokenStatusRow row : rows) {
-                tokenStatusTableModel.addRow(new Object[]{row.getProfile(), row.getStatus(), row.getExpiresAt(), row.getTimeRemaining()});
+                tokenStatusTableModel.addRow(new Object[]{row.getProfile(), row.getAccountNumber(), row.getStatus(), row.getExpiresAt(), row.getTimeRemaining()});
             }
 
             lastRefreshedLabel.setText("Last refreshed: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
@@ -682,7 +686,7 @@ public class SwingMain extends JFrame {
         filters.add(new RowFilter<>() {
             @Override
             public boolean include(Entry<?, ?> entry) {
-                return allowedStatuses.contains(entry.getStringValue(1));
+                return allowedStatuses.contains(entry.getStringValue(2));
             }
         });
         RowFilter<Object, Object> statusAndTextFilter = RowFilter.andFilter(filters);
@@ -1525,18 +1529,21 @@ public class SwingMain extends JFrame {
 
     private static class TokenStatusRow {
         private final String profile;
+        private final String accountNumber;
         private final String status;
         private final String expiresAt;
         private final String timeRemaining;
 
-        public TokenStatusRow(String profile, String status, String expiresAt, String timeRemaining) {
+        public TokenStatusRow(String profile, String accountNumber, String status, String expiresAt, String timeRemaining) {
             this.profile = profile;
+            this.accountNumber = accountNumber;
             this.status = status;
             this.expiresAt = expiresAt;
             this.timeRemaining = timeRemaining;
         }
 
         public String getProfile() { return profile; }
+        public String getAccountNumber() { return accountNumber; }
         public String getStatus() { return status; }
         public String getExpiresAt() { return expiresAt; }
         public String getTimeRemaining() { return timeRemaining; }
