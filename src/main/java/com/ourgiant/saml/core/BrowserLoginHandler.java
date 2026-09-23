@@ -371,7 +371,7 @@ public class BrowserLoginHandler {
     private void clickOktaFastPassSelection() {
         try {
             By fastPassLocator = By.xpath(
-                "//a[@aria-label='Select Okta Verify.'] | //a[contains(@aria-label,'Okta Verify')]"
+                "//div[@data-se='okta_verify-signed_nonce']//a[@data-se='button']"
             );
             WebElement fastPassOption = until(wait, ExpectedConditions.elementToBeClickable(fastPassLocator));
             fastPassOption.click();
