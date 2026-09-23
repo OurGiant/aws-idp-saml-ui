@@ -22,6 +22,7 @@ public class ProfileEditDialog extends JDialog {
     private final String originalProfileName; // null when adding a new profile
 
     private JTextField profileNameField;
+    private JTextField guiNameField;
     private JComboBox<String> samlProviderCombo;
     private JTextField accountNumberField;
     private JTextField iamRoleField;
@@ -65,20 +66,29 @@ public class ProfileEditDialog extends JDialog {
         panel.add(profileNameField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+        JLabel guiNameLabel = new JLabel("GUI Name:");
+        panel.add(guiNameLabel, gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        guiNameField = new JTextField();
+        guiNameField.setToolTipText("The name displayed by the SAML login configuration");
+        guiNameLabel.setLabelFor(guiNameField);
+        panel.add(guiNameField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
         panel.add(new JLabel("Identity Provider:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         samlProviderCombo = new JComboBox<>(configManager.getIdpProviders().toArray(new String[0]));
         samlProviderCombo.setToolTipText("Which configured identity provider handles login for this profile");
         panel.add(samlProviderCombo, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+        gbc.gridx = 0; gbc.gridy = 3; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
         panel.add(new JLabel("Account Number:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         accountNumberField = new JTextField();
         accountNumberField.setToolTipText("The 12-digit AWS account number to assume a role in");
         panel.add(accountNumberField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 3; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+        gbc.gridx = 0; gbc.gridy = 4; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
         panel.add(new JLabel("IAM Role Name:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         iamRoleField = new JTextField();
@@ -106,6 +116,7 @@ public class ProfileEditDialog extends JDialog {
         if (section == null) {
             return;
         }
+        guiNameField.setText(section.get("guiname", ""));
         accountNumberField.setText(section.get("accountnumber", ""));
         iamRoleField.setText(section.get("iamrole", ""));
         samlProviderCombo.setSelectedItem(section.get("samlprovider", ""));
@@ -113,11 +124,12 @@ public class ProfileEditDialog extends JDialog {
 
     private void onSave() {
         String profileName = profileNameField.getText().trim();
+        String guiName = guiNameField.getText().trim();
         String samlProvider = (String) samlProviderCombo.getSelectedItem();
         String accountNumber = accountNumberField.getText().trim();
         String iamRole = iamRoleField.getText().trim();
 
-        if (profileName.isEmpty() || samlProvider == null || accountNumber.isEmpty() || iamRole.isEmpty()) {
+        if (profileName.isEmpty() || guiName.isEmpty() || samlProvider == null || accountNumber.isEmpty() || iamRole.isEmpty()) {
             JOptionPane.showMessageDialog(this,
                 "All fields are required.",
                 "Missing Fields",
@@ -136,6 +148,7 @@ public class ProfileEditDialog extends JDialog {
         }
 
         Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("guiname", guiName);
         fields.put("accountnumber", accountNumber);
         fields.put("iamrole", iamRole);
         fields.put("samlprovider", samlProvider);

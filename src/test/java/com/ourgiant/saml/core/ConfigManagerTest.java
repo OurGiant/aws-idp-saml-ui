@@ -93,6 +93,23 @@ class ConfigManagerTest {
     }
 
     @Test
+    void saveProfile_persistsGuiName() throws Exception {
+        writeSamlsts("""
+                [global]
+                idp_entry_url = https://example.okta.com/app/example/sso/saml
+
+                [Fed-OKTA]
+                loginpage = https://example.okta.com/app/foo/sso/saml
+                """);
+
+        configManager = new ConfigManager();
+        configManager.saveProfile("my-profile", Map.of("guiname", "Production Account"));
+
+        assertEquals("Production Account", configManager.getGuiName("my-profile"));
+        assertTrue(readSamlsts().contains("guiname = Production Account"));
+    }
+
+    @Test
     void createConfig_doesNotEscapeColonsInUrls() throws Exception {
         configManager = new ConfigManager(false);
 
