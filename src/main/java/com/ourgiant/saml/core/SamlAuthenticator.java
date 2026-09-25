@@ -153,7 +153,7 @@ public class SamlAuthenticator {
         logger.info("Starting browser login to: {}", loginUrl);
         statusCallback.accept("Launching browser...");
 
-        WebDriver driver = createWebDriver(showBrowser);
+        WebDriver driver = createWebDriver(showBrowser, loginUrl);
         try {
             BrowserLoginHandler loginHandler = new BrowserLoginHandler(driver, useOktaFastPass, passwordManager,
                     showBrowser, accountNumber, iamRole, statusCallback, () -> cancelled);
@@ -171,8 +171,8 @@ public class SamlAuthenticator {
     /**
      * Create WebDriver instance based on configuration
      */
-    private WebDriver createWebDriver(boolean showBrowser) {
-        return WebDriverFactory.createWebDriver(configManager.getBrowserType(), showBrowser);
+    private WebDriver createWebDriver(boolean showBrowser, String loginUrl) {
+        return WebDriverFactory.createWebDriver(configManager.getBrowserType(), showBrowser, loginUrl);
     }
 
     /**

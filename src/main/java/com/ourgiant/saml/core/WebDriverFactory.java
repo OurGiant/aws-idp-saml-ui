@@ -8,6 +8,9 @@ import org.openqa.selenium.edge.EdgeOptions;
 import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.firefox.FirefoxOptions;
 
+import java.net.URI;
+import java.util.Map;
+
 /**
  * Creates Selenium WebDriver instances for the configured browser type. Shared by the SAML
  * login flow (SamlAuthenticator) and ephemeral "Open Console" browser windows (SwingMain) —
@@ -20,9 +23,13 @@ public class WebDriverFactory {
     }
 
     public static WebDriver createWebDriver(String browserType, boolean showBrowser) {
+        return createWebDriver(browserType, showBrowser, null);
+    }
+
+    public static WebDriver createWebDriver(String browserType, boolean showBrowser, String loginUrl) {
         switch (browserType.toLowerCase()) {
             case "edge":
-                return createEdgeDriver(showBrowser);
+                return createEdgeDriver(showBrowser, loginUrl);
             case "firefox":
                 return createFirefoxDriver(showBrowser);
             case "chrome":
@@ -52,7 +59,7 @@ public class WebDriverFactory {
         return new FirefoxDriver(options);
     }
 
-    private static WebDriver createEdgeDriver(boolean showBrowser) {
+    private static WebDriver createEdgeDriver(boolean showBrowser, String loginUrl) {
         EdgeOptions options = new EdgeOptions();
         System.setProperty("webdriver.manager.stats", "false");
         if (!showBrowser) {
@@ -60,7 +67,32 @@ public class WebDriverFactory {
         }
         options.addArguments("--disable-dev-shm-usage");
         options.addArguments("--disable-popup-blocking");
+        configureOktaAuthenticatorProtocol(options, loginUrl);
 
         return new EdgeDriver(options);
+    }
+
+    private static void configureOktaAuthenticatorProtocol(EdgeOptions options, String loginUrl) {
+        if (loginUrl == null) {
+            return;
+        }
+
+        URI loginUri;
+        try {
+            loginUri = URI.create(loginUrl);
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        if (loginUri.getScheme() == null || loginUri.getRawAuthority() == null) {
+            return;
+        }
+
+        String origin = loginUri.getScheme() + "://" + loginUri.getRawAuthority();
+        Map<String, Object> protocolPermissions = Map.of(
+            "allowed_origin_protocol_pairs", Map.of(
+                origin, Map.of("com-okta-authenticator", true)
+            )
+        );
+        options.setExperimentalOption("prefs", Map.of("protocol_handler", protocolPermissions));
     }
 }
