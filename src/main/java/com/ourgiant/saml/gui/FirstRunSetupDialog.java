@@ -1,6 +1,7 @@
 package com.ourgiant.saml.gui;
 
 import com.ourgiant.saml.core.ConfigManager;
+import com.ourgiant.saml.core.SamlAuthenticator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -220,6 +221,16 @@ public class FirstRunSetupDialog extends JDialog {
             JOptionPane.showMessageDialog(this,
                 "All fields are required. Please fill in every field before saving.",
                 "Missing Fields",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        try {
+            SamlAuthenticator.validateSecureLoginUrl(loginPage);
+        } catch (IllegalArgumentException e) {
+            JOptionPane.showMessageDialog(this,
+                e.getMessage(),
+                "Invalid SAML Login URL",
                 JOptionPane.WARNING_MESSAGE);
             return;
         }

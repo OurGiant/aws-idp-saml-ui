@@ -10,6 +10,7 @@ import software.amazon.awssdk.services.sts.model.AssumeRoleWithSamlRequest;
 import software.amazon.awssdk.services.sts.model.AssumeRoleWithSamlResponse;
 import software.amazon.awssdk.services.sts.model.Credentials;
 
+import java.net.URI;
 import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
 
@@ -150,10 +151,11 @@ public class SamlAuthenticator {
                                         boolean useOktaFastPass, boolean showBrowser,
                                         String accountNumber, String iamRole,
                                         Consumer<String> statusCallback) throws Exception {
+        validateSecureLoginUrl(loginUrl);
         logger.info("Starting browser login to: {}", loginUrl);
         statusCallback.accept("Launching browser...");
 
-        WebDriver driver = createWebDriver(showBrowser, loginUrl);
+        WebDriver driver = createWebDriver(showBrowser, loginUrl, useOktaFastPass);
         try {
             BrowserLoginHandler loginHandler = new BrowserLoginHandler(driver, useOktaFastPass, passwordManager,
                     showBrowser, accountNumber, iamRole, statusCallback, () -> cancelled);
@@ -171,8 +173,22 @@ public class SamlAuthenticator {
     /**
      * Create WebDriver instance based on configuration
      */
-    private WebDriver createWebDriver(boolean showBrowser, String loginUrl) {
-        return WebDriverFactory.createWebDriver(configManager.getBrowserType(), showBrowser, loginUrl);
+    private WebDriver createWebDriver(boolean showBrowser, String loginUrl, boolean useOktaFastPass) {
+        return WebDriverFactory.createWebDriver(configManager.getBrowserType(), showBrowser, loginUrl,
+                useOktaFastPass);
+    }
+
+    public static void validateSecureLoginUrl(String loginUrl) {
+        URI loginUri;
+        try {
+            loginUri = URI.create(loginUrl);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new IllegalArgumentException("SAML login URL must be a valid HTTPS URL.", e);
+        }
+        if (!"https".equalsIgnoreCase(loginUri.getScheme()) || loginUri.getHost() == null
+                || loginUri.getUserInfo() != null) {
+            throw new IllegalArgumentException("SAML login URL must be a valid HTTPS URL without embedded credentials.");
+        }
     }
 
     /**
