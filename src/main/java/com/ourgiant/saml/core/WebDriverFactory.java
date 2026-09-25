@@ -59,6 +59,7 @@ public class WebDriverFactory {
             options.addArguments("--headless");
         }
         options.addArguments("--disable-dev-shm-usage");
+        options.addArguments("--disable-popup-blocking");
 
         return new EdgeDriver(options);
     }
