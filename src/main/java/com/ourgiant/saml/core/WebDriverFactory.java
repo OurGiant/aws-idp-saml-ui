@@ -93,6 +93,11 @@ public class WebDriverFactory {
                 origin, Map.of("com-okta-authenticator", true)
             )
         );
-        options.setExperimentalOption("prefs", Map.of("protocol_handler", protocolPermissions));
+        String localNetworkAccessPermission =
+            "profile.content_settings.exceptions.local_network_access." + origin + ",*.setting";
+        options.setExperimentalOption("prefs", Map.of(
+            "protocol_handler", protocolPermissions,
+            localNetworkAccessPermission, 1
+        ));
     }
 }
