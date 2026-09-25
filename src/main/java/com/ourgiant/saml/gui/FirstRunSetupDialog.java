@@ -18,7 +18,7 @@ import java.util.Map;
 public class FirstRunSetupDialog extends JDialog {
     private static final Logger logger = LoggerFactory.getLogger(FirstRunSetupDialog.class);
 
-    private static final String[] BROWSERS = {"chrome", "firefox"};
+    private static final String[] BROWSERS = {"chrome", "firefox", "edge"};
 
     private static final String[] AWS_REGIONS = {
         "us-east-1", "us-east-2", "us-west-1", "us-west-2",

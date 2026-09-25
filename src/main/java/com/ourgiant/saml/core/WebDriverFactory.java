@@ -3,6 +3,8 @@ package com.ourgiant.saml.core;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.edge.EdgeDriver;
+import org.openqa.selenium.edge.EdgeOptions;
 import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.firefox.FirefoxOptions;
 
@@ -19,6 +21,8 @@ public class WebDriverFactory {
 
     public static WebDriver createWebDriver(String browserType, boolean showBrowser) {
         switch (browserType.toLowerCase()) {
+            case "edge":
+                return createEdgeDriver(showBrowser);
             case "firefox":
                 return createFirefoxDriver(showBrowser);
             case "chrome":
@@ -46,5 +50,16 @@ public class WebDriverFactory {
         System.setProperty("webdriver.manager.stats", "false");
 
         return new FirefoxDriver(options);
+    }
+
+    private static WebDriver createEdgeDriver(boolean showBrowser) {
+        EdgeOptions options = new EdgeOptions();
+        System.setProperty("webdriver.manager.stats", "false");
+        if (!showBrowser) {
+            options.addArguments("--headless");
+        }
+        options.addArguments("--disable-dev-shm-usage");
+
+        return new EdgeDriver(options);
     }
 }

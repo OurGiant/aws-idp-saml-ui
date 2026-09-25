@@ -15,7 +15,7 @@ that touches AWS console/CLI access.
 ## Features
 
 **Authentication & profiles**
-- Browser-driven SAML login (Selenium WebDriver, Chrome or Firefox) against any SAML 2.0 identity provider
+- Browser-driven SAML login (Selenium WebDriver, Chrome, Firefox, or Edge) against any SAML 2.0 identity provider
 - Okta FastPass support for password-less, device-based login
 - Guided first-run setup wizard with presets for Okta, Azure AD, ADFS, Ping Identity, and OneLogin
 - Manage any number of AWS profiles — add, edit, rename, and delete from the UI, backed by a standard `samlsts` INI config file
@@ -60,7 +60,7 @@ installed and doesn't require an installer.
 
 - Java 24 or higher (only needed if running the jar directly or building from source — the platform installers bundle their own runtime)
 - Maven 3.6+ (build from source only)
-- A Chrome or Firefox browser, for the SAML login flow
+- A Chrome, Firefox, or Edge browser, for the SAML login flow
 - Network access to your identity provider and to AWS
 
 ## Building from Source
@@ -274,7 +274,7 @@ MIT — see [LICENSE](LICENSE) for details.
 
 - If login fails with "Your Okta password needs to be reset before you can sign in", your IdP is forcing a password reset — log in to Okta via your browser to complete the reset, then try again
 - Ensure Java 24 is installed and `JAVA_HOME` is set correctly (not needed when using a platform installer)
-- Check browser compatibility for Selenium WebDriver (Chrome or Firefox)
+- Check browser compatibility for Selenium WebDriver (Chrome, Firefox, or Edge)
 - Verify your `samlsts` configuration and SAML provider settings via the Configuration/Profile Manager dialogs
 - If a profile lingers in the status table after being removed from `samlsts`, use **Configuration → Force Refresh** to prune it immediately
 - Review the application log (`aws-saml-ui.log`, alongside the jar) for error details
