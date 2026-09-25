@@ -1184,7 +1184,7 @@ public class SwingMain extends JFrame {
         }
     }
 
-    private static class StatusTableCellRenderer extends DefaultTableCellRenderer {
+    static class StatusTableCellRenderer extends DefaultTableCellRenderer {
         private final Set<String> expiringSoonProfiles;
         private final List<String> pinnedProfiles;
 
@@ -1204,7 +1204,8 @@ public class SwingMain extends JFrame {
             component.setFont(component.getFont().deriveFont(
                 pinnedProfiles.contains(rowProfile) ? Font.BOLD : Font.PLAIN));
 
-            if (column == 1 && value instanceof String status) {
+            int modelColumn = table.convertColumnIndexToModel(column);
+            if ("Status".equals(table.getModel().getColumnName(modelColumn)) && value instanceof String status) {
                 switch (status) {
                     case "VALID" -> {
                         // getValueAt (unlike the table model) takes view coordinates, so this
