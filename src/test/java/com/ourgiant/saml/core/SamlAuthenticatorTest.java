@@ -49,4 +49,17 @@ class SamlAuthenticatorTest {
 
         assertEquals("Matching role not found in SAML response: 999999999999/AdminRole", ex.getMessage());
     }
+
+    @Test
+    void validateSecureLoginUrl_acceptsHttpsUrl() {
+        SamlAuthenticator.validateSecureLoginUrl("https://login.example.com/app/sso/saml");
+    }
+
+    @Test
+    void validateSecureLoginUrl_rejectsHttpUrl() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> SamlAuthenticator.validateSecureLoginUrl("http://login.example.com/app/sso/saml"));
+
+        assertEquals("SAML login URL must be a valid HTTPS URL without embedded credentials.", ex.getMessage());
+    }
 }

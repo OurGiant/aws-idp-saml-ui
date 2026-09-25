@@ -21,7 +21,7 @@ import java.util.HashSet;
 public class ConfigurationDialog extends JDialog {
     private static final Logger logger = LoggerFactory.getLogger(ConfigurationDialog.class);
 
-    private static final String[] BROWSERS = {"chrome", "firefox"};
+    private static final String[] BROWSERS = {"chrome", "firefox", "edge"};
 
     private final ConfigManager configManager;
     private final DatabaseManager databaseManager;
