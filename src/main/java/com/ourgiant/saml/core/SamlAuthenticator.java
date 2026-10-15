@@ -23,13 +23,21 @@ public class SamlAuthenticator {
     private final ConfigManager configManager;
     private final CredentialManager credentialManager;
     private final PasswordManager passwordManager;
+    private final AwsConfigFile awsConfigFile;
     private volatile boolean cancelled = false;
 
     public SamlAuthenticator(ConfigManager configManager, CredentialManager credentialManager,
                               PasswordManager passwordManager) {
+        this(configManager, credentialManager, passwordManager, null);
+    }
+
+    /** @param awsConfigFile where to make sure each profile has a region, or null to leave the AWS config alone */
+    public SamlAuthenticator(ConfigManager configManager, CredentialManager credentialManager,
+                              PasswordManager passwordManager, AwsConfigFile awsConfigFile) {
         this.configManager = configManager;
         this.credentialManager = credentialManager;
         this.passwordManager = passwordManager;
+        this.awsConfigFile = awsConfigFile;
     }
 
     // Just sets a flag that BrowserLoginHandler checks between polls of every Selenium wait,
@@ -140,8 +148,21 @@ public class SamlAuthenticator {
         // Save credentials
         statusCallback.accept("Saving credentials for profile: " + profileName + "...");
         credentialManager.saveCredentials(profileName, awsCredentials);
+        ensureRegionInAwsConfig(profileName, awsRegion);
 
         logger.info("Successfully obtained and saved credentials for profile: {}", profileName);
+    }
+
+    /** Best-effort: the credentials are already saved, so a problem here must not fail the request. */
+    void ensureRegionInAwsConfig(String profileName, String awsRegion) {
+        if (awsConfigFile == null) {
+            return;
+        }
+        try {
+            awsConfigFile.ensureRegion(profileName, awsRegion);
+        } catch (Exception e) {
+            logger.warn("Could not add region for profile {} to {}", profileName, awsConfigFile.getFile(), e);
+        }
     }
 
     /**

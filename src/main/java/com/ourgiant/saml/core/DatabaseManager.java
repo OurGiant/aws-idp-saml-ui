@@ -212,6 +212,15 @@ public class DatabaseManager {
         setConfig("tray_notifications_enabled", String.valueOf(enabled));
     }
 
+    public boolean getWriteRegionToAwsConfigEnabled() {
+        String value = getConfig("write_region_to_aws_config");
+        return !"false".equalsIgnoreCase(value); // Enabled by default -- without it the AWS CLI can't use a profile until a region is set up by hand
+    }
+
+    public void setWriteRegionToAwsConfigEnabled(boolean enabled) {
+        setConfig("write_region_to_aws_config", String.valueOf(enabled));
+    }
+
     public boolean getAutoRenewPinnedProfilesEnabled() {
         String value = getConfig("auto_renew_pinned_profiles_enabled");
         return "true".equalsIgnoreCase(value); // Disabled by default -- opt in before the app starts unattended browser logins

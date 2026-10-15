@@ -20,6 +20,7 @@ that touches AWS console/CLI access.
 - Guided first-run setup wizard with presets for Okta, Azure AD, ADFS, Ping Identity, and OneLogin
 - Manage any number of AWS profiles — add, edit, rename, and delete from the UI, backed by a standard `samlsts` INI config file
 - One-click AWS Management Console launch via the STS federation endpoint
+- Adds each profile's region to `~/.aws/config` when it has none, so `aws --profile <name>` works right away (only ever adds a line; existing settings are left alone; can be turned off in Configuration)
 
 **Credential & token management**
 - Live credential status table with per-profile expiration and time remaining

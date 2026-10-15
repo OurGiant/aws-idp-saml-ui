@@ -1,6 +1,7 @@
 package com.ourgiant.saml.gui;
 
 import com.ourgiant.saml.ThemeManager;
+import com.ourgiant.saml.core.AwsConfigFile;
 import com.ourgiant.saml.core.AwsConsoleLauncher;
 import com.ourgiant.saml.core.BatchRefreshRunner;
 import com.ourgiant.saml.core.ConfigManager;
@@ -924,7 +925,8 @@ public class SwingMain extends JFrame {
         loginProgressBar.setVisible(true);
         statusLabel.setText("Starting credential request for profile: " + selectedProfile + "...");
 
-        SamlAuthenticator authenticator = new SamlAuthenticator(configManager, credentialManager, passwordManager);
+        SamlAuthenticator authenticator = new SamlAuthenticator(configManager, credentialManager, passwordManager,
+            databaseManager.getWriteRegionToAwsConfigEnabled() ? AwsConfigFile.forCurrentUser() : null);
         activeAuthenticator = authenticator;
 
         // Run credential request in background thread
