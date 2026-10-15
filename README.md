@@ -19,6 +19,7 @@ that touches AWS console/CLI access.
 - Okta FastPass support for password-less, device-based login
 - Guided first-run setup wizard with presets for Okta, Azure AD, ADFS, Ping Identity, and OneLogin
 - Manage any number of AWS profiles — add, edit, rename, and delete from the UI, backed by a standard `samlsts` INI config file
+- Import profiles from your identity provider: log in once (Manage Profiles → Import from IdP...), and every AWS role it grants you is listed to tick and import, with no account numbers or role names to look up
 - One-click AWS Management Console launch via the STS federation endpoint
 - Adds each profile's region to `~/.aws/config` when it has none, so `aws --profile <name>` works right away (only ever adds a line; existing settings are left alone; can be turned off in Configuration)
 
@@ -249,11 +250,13 @@ src/main/java/com/ourgiant/saml/
 │   ├── ConfigurationDialog.java   # Application settings UI
 │   ├── ProfileManagerDialog.java  # Profile list management UI
 │   ├── ProfileEditDialog.java     # Add/edit a single profile
+│   ├── ImportRolesDialog.java     # Import profiles from the roles an IdP login grants
 │   └── LogViewerDialog.java       # In-app viewer for the app and startup logs
 ├── core/                          # Domain logic - no javax.swing.* dependency
 │   ├── SamlAuthenticator.java     # SAML authentication flow orchestration
 │   ├── SamlParser.java            # SAML assertion parsing (XXE-hardened)
 │   ├── SamlRole.java              # SAML role representation
+│   ├── RoleImportPlanner.java     # Import candidates, name suggestions and validation
 │   ├── BrowserLoginHandler.java   # Browser automation for the IdP login page
 │   ├── BatchRefreshRunner.java    # Batch credential-refresh orchestration
 │   ├── AwsConsoleLauncher.java    # AWS federation console sign-in

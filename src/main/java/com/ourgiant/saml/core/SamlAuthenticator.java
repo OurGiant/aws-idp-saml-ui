@@ -11,6 +11,7 @@ import software.amazon.awssdk.services.sts.model.AssumeRoleWithSamlResponse;
 import software.amazon.awssdk.services.sts.model.Credentials;
 
 import java.net.URI;
+import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
 
@@ -105,13 +106,42 @@ public class SamlAuthenticator {
 
         // Perform browser login and get SAML response
         String samlResponse = performBrowserLogin(loginUrl, loginTitle, username, useOktaFastPass, showBrowser,
-                accountNumber, iamRole, statusCallback);
+                accountNumber, iamRole, showBrowser, statusCallback);
 
         if (cancelled) {
             throw new CancellationException("Credential request cancelled for profile: " + profileName);
         }
 
         return samlResponse;
+    }
+
+    /**
+     * Logs in to an identity provider (a {@code Fed-*} section) with the global username, without
+     * any profile, and returns every AWS role the resulting assertion offers — the basis for
+     * importing profiles (#194). The browser is always closed afterwards, even when shown, since
+     * no console sign-in follows.
+     */
+    public List<SamlRole> discoverRoles(String samlProvider, boolean useOktaFastPass, boolean showBrowser,
+                                        Consumer<String> statusCallback) throws Exception {
+        logger.info("Discovering roles via identity provider: {}", samlProvider);
+        var providerConfig = samlProvider != null ? configManager.getProvider(samlProvider) : null;
+        if (providerConfig == null) {
+            throw new IllegalArgumentException("SAML provider not found: " + samlProvider);
+        }
+        String loginUrl = providerConfig.get("loginpage");
+        String loginTitle = providerConfig.get("logintitle");
+        if (loginUrl == null || loginTitle == null) {
+            throw new IllegalArgumentException("Incomplete provider configuration for: " + samlProvider);
+        }
+
+        String samlResponse = performBrowserLogin(loginUrl, loginTitle, configManager.getDefaultUsername(),
+                useOktaFastPass, showBrowser, null, null, false, statusCallback);
+        if (cancelled) {
+            throw new CancellationException("Role discovery cancelled for provider: " + samlProvider);
+        }
+
+        statusCallback.accept("Reading roles from the SAML response...");
+        return new SamlParser().parseRolesFromSaml(samlResponse);
     }
 
     /**
@@ -170,7 +200,7 @@ public class SamlAuthenticator {
      */
     private String performBrowserLogin(String loginUrl, String loginTitle, String username,
                                         boolean useOktaFastPass, boolean showBrowser,
-                                        String accountNumber, String iamRole,
+                                        String accountNumber, String iamRole, boolean leaveBrowserOpen,
                                         Consumer<String> statusCallback) throws Exception {
         validateSecureLoginUrl(loginUrl);
         logger.info("Starting browser login to: {}", loginUrl);
@@ -185,7 +215,7 @@ public class SamlAuthenticator {
             driver.quit();
             throw e;
         } finally {
-            if (!showBrowser) {
+            if (!leaveBrowserOpen) {
                 driver.quit();
             }
         }

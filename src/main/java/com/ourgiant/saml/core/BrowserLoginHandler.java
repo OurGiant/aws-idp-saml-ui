@@ -515,7 +515,8 @@ public class BrowserLoginHandler {
             throw new RuntimeException("SAML response not found in AWS sign-in page");
         }
 
-        if (showBrowser) {
+        // No account/role means role discovery (#194): only the assertion is wanted, not a console sign-in.
+        if (showBrowser && accountNumber != null) {
             requireRoleInAssertion(samlResponse);
             selectRoleAndSignIn();
         }

@@ -34,6 +34,21 @@ class SamlParserTest {
     }
 
     @Test
+    void parseRolesFromSaml_acceptsPrincipalFirstOrder() throws Exception {
+        // ADFS and some other IdPs send "principalArn,roleArn"; AWS accepts either order.
+        String saml = samlWithRoleAttributeValues(
+                "arn:aws:iam::123456789012:saml-provider/ADFS,arn:aws:iam::123456789012:role/AdminRole"
+        );
+
+        SamlRole role = parser.parseRolesFromSaml(encode(saml)).get(0);
+
+        assertEquals("arn:aws:iam::123456789012:role/AdminRole", role.roleArn());
+        assertEquals("arn:aws:iam::123456789012:saml-provider/ADFS", role.principalArn());
+        assertEquals("123456789012", role.accountNumber());
+        assertEquals("AdminRole", role.roleName());
+    }
+
+    @Test
     void parseRolesFromSaml_ignoresNonRoleAttributes() throws Exception {
         String saml = """
                 <samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
