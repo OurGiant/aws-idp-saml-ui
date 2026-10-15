@@ -34,6 +34,7 @@ that touches AWS console/CLI access.
 **Interface**
 - FlatLaf-based UI with multiple light/dark themes
 - System tray integration, including start-minimized-to-tray and a macOS Dock reopen fallback
+- Tray menu quick actions: Request Credentials / Open Console for each pinned profile (with its current status) and Refresh Expiring/Expired Profiles, without opening the window; results arrive as tray notifications while the window is hidden
 - Remembers the main window's size, position, and maximized state between launches (moved back on-screen if its monitor is gone)
 - Silent background check for new releases, with an in-app prompt when one is available
 

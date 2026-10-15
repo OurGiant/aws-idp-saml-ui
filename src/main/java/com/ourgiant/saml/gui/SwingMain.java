@@ -97,6 +97,9 @@ public class SwingMain extends JFrame {
     private String contextMenuTargetProfile;
 
     private TrayIcon trayIcon;
+    private PopupMenu trayMenu;
+    // What trayMenu currently shows; it's only rebuilt when this changes (see updateTrayMenu()).
+    private TrayMenuEntries lastTrayMenuEntries;
     private final Map<String, Instant> lastNotifiedExpiration = new HashMap<>();
     private final Map<String, Instant> lastAutoRenewAttempt = new HashMap<>();
     private final Set<String> expiringSoonProfiles = new HashSet<>();
@@ -568,14 +571,8 @@ public class SwingMain extends JFrame {
         try {
             Image trayImage = Toolkit.getDefaultToolkit().getImage(getClass().getResource("/saml_swing_icon_small.png"));
 
-            PopupMenu trayMenu = new PopupMenu();
-            MenuItem showItem = new MenuItem("Show");
-            showItem.addActionListener(e -> restoreFromTray());
-            MenuItem exitItem = new MenuItem("Exit");
-            exitItem.addActionListener(e -> exitApplication());
-            trayMenu.add(showItem);
-            trayMenu.addSeparator();
-            trayMenu.add(exitItem);
+            trayMenu = new PopupMenu();
+            updateTrayMenu();
 
             trayIcon = new TrayIcon(trayImage, "AWS IDP SAML Client", trayMenu);
             trayIcon.setImageAutoSize(true);
@@ -616,6 +613,81 @@ public class SwingMain extends JFrame {
         } catch (Exception e) {
             logger.warn("Failed to register macOS Dock reopen handler", e);
         }
+    }
+
+    /**
+     * Rebuilds the tray menu (#195): Show, a submenu of quick actions per pinned profile, Refresh
+     * Expiring/Expired, Exit. Called from every status refresh (which pin/unpin/reorder also
+     * trigger) and whenever a request starts or finishes; a no-op unless what the menu would show
+     * has actually changed.
+     */
+    private void updateTrayMenu() {
+        if (trayMenu == null) {
+            return;
+        }
+        // The tray is set up partway through initializeUI(), before the status table exists; until the
+        // first refreshStatusTable() fills it, the menu just has no profile entries.
+        Map<String, String> statuses = new HashMap<>();
+        int rowCount = tokenStatusTableModel != null ? tokenStatusTableModel.getRowCount() : 0;
+        for (int row = 0; row < rowCount; row++) {
+            statuses.put((String) tokenStatusTableModel.getValueAt(row, PROFILE_COLUMN),
+                (String) tokenStatusTableModel.getValueAt(row, STATUS_COLUMN));
+        }
+        TrayMenuEntries entries = TrayMenuEntries.build(pinnedProfileOrder, statuses, expiringSoonProfiles,
+            credentialManager.getAllProfileNames(), statuses.keySet(), credentialRequestInProgress);
+        if (entries.equals(lastTrayMenuEntries)) {
+            return;
+        }
+        lastTrayMenuEntries = entries;
+
+        trayMenu.removeAll();
+        MenuItem showItem = new MenuItem("Show");
+        showItem.addActionListener(e -> restoreFromTray());
+        trayMenu.add(showItem);
+        trayMenu.addSeparator();
+
+        if (entries.profiles().isEmpty()) {
+            MenuItem hint = new MenuItem("No pinned profiles (pin one from the status table)");
+            hint.setEnabled(false);
+            trayMenu.add(hint);
+        }
+        for (TrayMenuEntries.Entry entry : entries.profiles()) {
+            Menu profileMenu = new Menu(entry.label());
+            MenuItem requestItem = new MenuItem("Request Credentials");
+            requestItem.setEnabled(entry.canRequest());
+            requestItem.addActionListener(e -> requestCredentialsForProfile(entry.profile()));
+            profileMenu.add(requestItem);
+            MenuItem consoleItem = new MenuItem("Open Console");
+            consoleItem.setEnabled(entry.canOpenConsole());
+            consoleItem.addActionListener(e -> openAwsConsoleForProfile(entry.profile()));
+            profileMenu.add(consoleItem);
+            trayMenu.add(profileMenu);
+        }
+
+        trayMenu.addSeparator();
+        MenuItem refreshItem = new MenuItem("Refresh Expiring/Expired Profiles...");
+        refreshItem.setEnabled(!entries.requestInProgress());
+        refreshItem.addActionListener(e -> refreshExpiringOrExpiredProfiles());
+        trayMenu.add(refreshItem);
+        trayMenu.addSeparator();
+        MenuItem exitItem = new MenuItem("Exit");
+        exitItem.addActionListener(e -> exitApplication());
+        trayMenu.add(exitItem);
+    }
+
+    /**
+     * When the window is hidden in the tray (e.g. the action was started from the tray menu), a
+     * result is shown as a tray notification rather than a dialog popping up out of nowhere.
+     * Returns false — so the caller shows its usual dialog — when the window is visible or tray
+     * notifications are unavailable or turned off.
+     */
+    private boolean notifyIfHiddenInTray(String title, String message, TrayIcon.MessageType type) {
+        if (isVisible() || trayIcon == null || !databaseManager.getTrayNotificationsEnabled()) {
+            return false;
+        }
+        logger.info("Window hidden in tray; showing notification instead of a dialog: {} - {}", title, message);
+        trayIcon.displayMessage(title, message, type);
+        return true;
     }
 
     private void restoreFromTray() {
@@ -759,6 +831,7 @@ public class SwingMain extends JFrame {
             }
 
             maybeAutoRenewPinnedProfiles();
+            updateTrayMenu();
         } catch (Exception e) {
             if (!credentialRequestInProgress) {
                 statusLabel.setText("Failed to update status table: " + e.getMessage());
@@ -928,6 +1001,7 @@ public class SwingMain extends JFrame {
         credentialRequestInProgress = true;
         credentialRequestCancelledByUser = false;
         loginProgressBar.setVisible(true);
+        updateTrayMenu();
         statusLabel.setText("Starting credential request for profile: " + selectedProfile + "...");
 
         SamlAuthenticator authenticator = new SamlAuthenticator(configManager, credentialManager, passwordManager,
@@ -956,6 +1030,7 @@ public class SwingMain extends JFrame {
                 credentialRequestInProgress = false;
                 loginProgressBar.setVisible(false);
                 activeAuthenticator = null;
+                updateTrayMenu();
 
                 if (credentialRequestCancelledByUser) {
                     statusLabel.setText("Credential request cancelled for profile: " + selectedProfile);
@@ -967,14 +1042,20 @@ public class SwingMain extends JFrame {
                     refreshStatusTable();
                     updateCredentialButtons();
                     statusLabel.setText("Credentials successfully obtained for profile: " + selectedProfile);
-                    JOptionPane.showMessageDialog(SwingMain.this,
-                        "Credentials successfully obtained for profile: " + selectedProfile,
-                        "Success",
-                        JOptionPane.INFORMATION_MESSAGE);
+                    if (!notifyIfHiddenInTray("Credentials obtained",
+                            "Credentials successfully obtained for profile: " + selectedProfile, TrayIcon.MessageType.INFO)) {
+                        JOptionPane.showMessageDialog(SwingMain.this,
+                            "Credentials successfully obtained for profile: " + selectedProfile,
+                            "Success",
+                            JOptionPane.INFORMATION_MESSAGE);
+                    }
                 } catch (Exception ex) {
                     CredentialRequestError error = CredentialRequestError.classify(ex);
                     statusLabel.setText(error.statusMessage());
-                    showCredentialErrorDialog(selectedProfile, error);
+                    if (!notifyIfHiddenInTray(error.title() + " (" + selectedProfile + ")",
+                            error.guidance() + " Open the app for details.", TrayIcon.MessageType.ERROR)) {
+                        showCredentialErrorDialog(selectedProfile, error);
+                    }
                 }
             }
         };
@@ -1163,6 +1244,7 @@ public class SwingMain extends JFrame {
         credentialRequestInProgress = true;
         credentialRequestCancelledByUser = false;
         loginProgressBar.setVisible(true);
+        updateTrayMenu();
         statusLabel.setText("Starting batch refresh for " + targets.size() + " profile(s)...");
 
         SwingWorker<List<BatchRefreshRunner.Result>, String> worker = new SwingWorker<>() {
@@ -1198,6 +1280,7 @@ public class SwingMain extends JFrame {
                 updateRefreshSelectedMenuItemEnabled();
                 loginProgressBar.setVisible(false);
                 activeAuthenticator = null;
+                updateTrayMenu();
 
                 List<BatchRefreshRunner.Result> results;
                 try {
@@ -1236,6 +1319,13 @@ public class SwingMain extends JFrame {
 
     private void showBatchRefreshCompletionDialog(long succeeded, List<BatchRefreshRunner.Result> failures,
                                                     boolean cancelled, int notAttempted) {
+        String summary = succeeded + " succeeded, " + failures.size() + " failed"
+            + (cancelled ? ", " + notAttempted + " not attempted (cancelled)" : "")
+            + (failures.isEmpty() ? "" : ": " + failures.stream().map(BatchRefreshRunner.Result::profile).collect(Collectors.joining(", ")));
+        if (notifyIfHiddenInTray(cancelled ? "Batch refresh cancelled" : "Batch refresh complete", summary,
+                failures.isEmpty() ? TrayIcon.MessageType.INFO : TrayIcon.MessageType.WARNING)) {
+            return;
+        }
         if (failures.isEmpty() && !cancelled) {
             JOptionPane.showMessageDialog(SwingMain.this,
                 "Refreshed " + succeeded + " profile(s) successfully.",
@@ -1647,10 +1737,13 @@ public class SwingMain extends JFrame {
                 } catch (Exception ex) {
                     statusLabel.setText("Failed to open AWS Console: " + ex.getMessage());
                     logger.error("Failed to open AWS Console for profile: {}", selectedProfile, ex);
-                    JOptionPane.showMessageDialog(SwingMain.this,
-                        "Failed to open AWS Console: " + ex.getMessage(),
-                        "Error",
-                        JOptionPane.ERROR_MESSAGE);
+                    if (!notifyIfHiddenInTray("Failed to open AWS Console (" + selectedProfile + ")", ex.getMessage(),
+                            TrayIcon.MessageType.ERROR)) {
+                        JOptionPane.showMessageDialog(SwingMain.this,
+                            "Failed to open AWS Console: " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    }
                 }
             }
         };
