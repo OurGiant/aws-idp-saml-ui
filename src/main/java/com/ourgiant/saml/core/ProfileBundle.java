@@ -47,7 +47,7 @@ public record ProfileBundle(String appVersion, String exportedAt, Map<String, Ma
     public static final Set<String> EXPORTED_SETTINGS = Set.of(
         "session_duration", "password_expiration_minutes", "theme", "browser", "use_fastpass",
         "tray_notifications_enabled", "auto_renew_pinned_profiles_enabled", "start_minimized_to_tray",
-        "write_region_to_aws_config", "credential_export_format");
+        "write_region_to_aws_config", "credential_export_format", "expiry_warning_minutes");
 
     public ProfileBundle {
         samlstsSections = copyNested(samlstsSections);
@@ -84,6 +84,7 @@ public record ProfileBundle(String appVersion, String exportedAt, Map<String, Ma
                  "start_minimized_to_tray", "write_region_to_aws_config" -> value.equals("true") || value.equals("false");
             case "browser" -> Set.of("chrome", "firefox", "edge").contains(value);
             case "credential_export_format" -> java.util.Arrays.stream(CredentialExportFormat.values()).anyMatch(f -> f.name().equals(value));
+            case "expiry_warning_minutes" -> value.matches("\\d{1,3}") && DatabaseManager.EXPIRY_WARNING_CHOICES.contains(Integer.parseInt(value));
             case "theme" -> !value.isBlank(); // checked against the installed themes when applied (ThemeManager falls back)
             default -> false;
         };

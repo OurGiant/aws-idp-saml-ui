@@ -186,4 +186,17 @@ class DatabaseManagerTest {
 
         assertFalse(databaseManager.isProfilePinned("stale"));
     }
+
+    @Test
+    void expiryWarningMinutes_defaultsToFiveAndOnlyAcceptsOfferedChoices() {
+        assertEquals(5, databaseManager.getExpiryWarningMinutes());
+
+        databaseManager.setExpiryWarningMinutes(15);
+        assertEquals(15, databaseManager.getExpiryWarningMinutes());
+
+        databaseManager.setConfig("expiry_warning_minutes", "7");
+        assertEquals(5, databaseManager.getExpiryWarningMinutes(), "a value not offered in the UI falls back to the default");
+        databaseManager.setConfig("expiry_warning_minutes", "soon");
+        assertEquals(5, databaseManager.getExpiryWarningMinutes());
+    }
 }
