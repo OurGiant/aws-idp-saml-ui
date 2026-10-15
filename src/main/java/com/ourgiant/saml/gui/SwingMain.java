@@ -104,6 +104,7 @@ public class SwingMain extends JFrame {
     private PopupMenu trayMenu;
     // What trayMenu currently shows; it's only rebuilt when this changes (see updateTrayMenu()).
     private TrayMenuEntries lastTrayMenuEntries;
+    private String lastTrayTooltip;
     private final Map<String, Instant> lastNotifiedExpiration = new HashMap<>();
     private final Map<String, Instant> lastAutoRenewAttempt = new HashMap<>();
     private final Set<String> expiringSoonProfiles = new HashSet<>();
@@ -808,7 +809,7 @@ public class SwingMain extends JFrame {
             trayMenu = new PopupMenu();
             updateTrayMenu();
 
-            trayIcon = new TrayIcon(trayImage, "AWS IDP SAML Client", trayMenu);
+            trayIcon = new TrayIcon(trayImage, TrayTooltip.TITLE, trayMenu);
             trayIcon.setImageAutoSize(true);
             trayIcon.addActionListener(e -> restoreFromTray());
             SystemTray.getSystemTray().add(trayIcon);
@@ -907,6 +908,29 @@ public class SwingMain extends JFrame {
         MenuItem exitItem = new MenuItem("Exit");
         exitItem.addActionListener(e -> exitApplication());
         trayMenu.add(exitItem);
+    }
+
+    /** Countdown text on the tray icon's tooltip (#225); only touches the native icon when the text changes. */
+    private void updateTrayTooltip() {
+        if (trayIcon == null) {
+            return;
+        }
+        Set<String> withCredentials = credentialManager.getAllProfileNames();
+        Map<String, Instant> expirations = new HashMap<>();
+        tokenStateManager.getAllExpirations().forEach((profile, expiration) -> {
+            if (expiration != null && withCredentials.contains(profile)) {
+                expirations.put(profile, expiration);
+            }
+        });
+        List<String> known = new ArrayList<>();
+        for (int row = 0; row < tokenStatusTableModel.getRowCount(); row++) {
+            known.add((String) tokenStatusTableModel.getValueAt(row, PROFILE_COLUMN));
+        }
+        String text = TrayTooltip.build(pinnedProfileOrder, expirations, known, Instant.now());
+        if (!text.equals(lastTrayTooltip)) {
+            lastTrayTooltip = text;
+            trayIcon.setToolTip(text);
+        }
     }
 
     /**
@@ -1082,6 +1106,7 @@ public class SwingMain extends JFrame {
 
             maybeAutoRenewPinnedProfiles();
             updateTrayMenu();
+            updateTrayTooltip();
         } catch (Exception e) {
             if (!credentialRequestInProgress) {
                 statusLabel.setText("Failed to update status table: " + e.getMessage());
