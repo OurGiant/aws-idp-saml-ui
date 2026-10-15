@@ -36,10 +36,10 @@ Something not working?
 <i>Help &rarr; View Logs...</i> shows what the app has been doing, including a startup log if it ever fails to open. <b>Open Log Folder</b> takes you to the files to share when asking for help.
 ---
 Read the status colors
-In the status table, the Status column is <b>green</b> while credentials are valid, <b>amber</b> in the last 5 minutes before they expire, <b>red</b> once expired, and grey when the app doesn't know.
+In the status table, the Status column is <b>green</b> while credentials are valid, <b>amber</b> when they're about to expire (5 minutes before, unless you change it in <i>File &rarr; Configuration</i>), <b>red</b> once expired, and grey when the app doesn't know.
 ---
 Get a heads-up before credentials expire
-Turn on <i>Show tray notification before credentials expire</i> in <i>File &rarr; Configuration</i> and you'll get a tray notification a few minutes before a profile runs out, even with the window closed.
+Turn on <i>Show tray notification before credentials expire</i> in <i>File &rarr; Configuration</i> and you'll get a tray notification shortly before a profile runs out, even with the window closed. Choose how early with <i>Warn when credentials expire within</i>; a longer warning helps before a long meeting.
 ---
 Refresh just the profiles you pick
 Select several rows in the status table with <b>Ctrl</b>-click or <b>Shift</b>-click, then choose <i>Actions &rarr; Refresh Selected Profiles...</i>.

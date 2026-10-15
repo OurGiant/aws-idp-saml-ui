@@ -29,7 +29,7 @@ that touches AWS console/CLI access.
 - Live credential status table with per-profile expiration and time remaining
 - Filter the table by name and by status (Valid / Expired / Unknown), independently or combined
 - Background auto-refresh (every 30s) plus a manual Refresh Status button
-- System tray notifications before a profile's credentials expire
+- System tray notifications before a profile's credentials expire, with a configurable warning time (5, 10, 15 or 30 minutes) that also drives the amber "expiring soon" status, auto-renew and Refresh Expiring/Expired
 - Encrypted, hybrid AES/RSA credential export for handing session credentials to other tooling (e.g. automated deployment scripts) without exposing them in plain text
 - Automatic database cleanup: profiles removed from `samlsts` are pruned from local storage after a grace period, with a "Force Refresh" option in Settings to prune immediately
 

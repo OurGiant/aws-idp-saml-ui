@@ -64,7 +64,9 @@ public class SwingMain extends JFrame {
     // leave code reading the wrong one (#206).
     private static final int PROFILE_COLUMN = 0;
     private static final int STATUS_COLUMN = 2;
-    private static final Duration EXPIRY_WARNING_THRESHOLD = Duration.ofMinutes(5);
+    // "Expiring soon" lead time (#228). Re-read from the database at the start of every status
+    // refresh, so a change in Configuration applies on the next refresh without a restart.
+    private Duration expiryWarningThreshold = Duration.ofMinutes(DatabaseManager.EXPIRY_WARNING_CHOICES.get(0));
     // How long to wait before retrying an auto-renew attempt for the same pinned profile after
     // one fails (e.g. it needs an interactive MFA step auto-renew can't complete headlessly) --
     // without this, a profile stuck in that state would be retried every statusRefreshTimer
@@ -492,8 +494,7 @@ public class SwingMain extends JFrame {
         batchRefreshMenuItem = new JMenuItem("Refresh Expiring/Expired Profiles...");
         batchRefreshMenuItem.setMnemonic(KeyEvent.VK_E);
         batchRefreshMenuItem.addActionListener(e -> refreshExpiringOrExpiredProfiles());
-        batchRefreshMenuItem.setToolTipText("Renew credentials (via browser login) for every profile that's "
-            + "expired or within " + formatDuration(EXPIRY_WARNING_THRESHOLD) + " of expiring");
+        updateExpiryWarningTexts();
         actionsMenu.add(batchRefreshMenuItem);
 
         refreshSelectedMenuItem = new JMenuItem("Refresh Selected Profiles...");
@@ -979,7 +980,7 @@ public class SwingMain extends JFrame {
         if (trayIcon == null || !databaseManager.getTrayNotificationsEnabled()) {
             return;
         }
-        if (remaining.compareTo(EXPIRY_WARNING_THRESHOLD) > 0) {
+        if (remaining.compareTo(expiryWarningThreshold) > 0) {
             return;
         }
         if (expiration.equals(lastNotifiedExpiration.get(profile))) {
@@ -994,8 +995,20 @@ public class SwingMain extends JFrame {
         );
     }
 
+    private void updateExpiryWarningTexts() {
+        if (batchRefreshMenuItem != null) {
+            batchRefreshMenuItem.setToolTipText("Renew credentials (via browser login) for every profile that's "
+                + "expired or within " + formatDuration(expiryWarningThreshold) + " of expiring");
+        }
+    }
+
     private void refreshStatusTable() {
         try {
+            Duration threshold = Duration.ofMinutes(databaseManager.getExpiryWarningMinutes());
+            if (!threshold.equals(expiryWarningThreshold)) {
+                expiryWarningThreshold = threshold;
+                updateExpiryWarningTexts();
+            }
             tokenStatusTableModel.setRowCount(0);
             expiringSoonProfiles.clear();
             pinnedProfileOrder.clear();
@@ -1030,7 +1043,7 @@ public class SwingMain extends JFrame {
                     expiresAtText = formatInstant(expiration);
                     Duration remaining = Duration.between(now, expiration);
                     timeRemaining = formatDuration(remaining);
-                    if (remaining.compareTo(EXPIRY_WARNING_THRESHOLD) <= 0) {
+                    if (remaining.compareTo(expiryWarningThreshold) <= 0) {
                         expiringSoonProfiles.add(profile);
                     }
                     maybeNotifyExpiringSoon(profile, expiration, remaining);
@@ -1312,7 +1325,7 @@ public class SwingMain extends JFrame {
     }
 
     /**
-     * Refreshes every profile currently EXPIRED or within EXPIRY_WARNING_THRESHOLD of expiring,
+     * Refreshes every profile currently EXPIRED or within expiryWarningThreshold of expiring,
      * so a user managing many profiles doesn't have to repeat "select profile, click Request
      * Credentials, wait" once per stale profile.
      */
@@ -1669,6 +1682,7 @@ public class SwingMain extends JFrame {
     private void showConfigurationDialog() {
         ConfigurationDialog dialog = new ConfigurationDialog(this, configManager, databaseManager, passwordManager);
         dialog.setVisible(true);
+        refreshStatusTable(); // apply settings that affect the table now, e.g. the expiry warning lead time
     }
 
     private void showProfileManagerDialog() {

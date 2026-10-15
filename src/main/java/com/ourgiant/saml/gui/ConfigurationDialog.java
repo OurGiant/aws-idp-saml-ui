@@ -34,6 +34,7 @@ public class ConfigurationDialog extends JDialog {
     private JComboBox<String> browserComboBox;
     private JCheckBox useFastPassCheckBox;
     private JCheckBox trayNotificationsCheckBox;
+    private JComboBox<Integer> expiryWarningComboBox;
     private JCheckBox autoRenewPinnedProfilesCheckBox;
     private JCheckBox startMinimizedCheckBox;
     private JCheckBox showStartupTipsCheckBox;
@@ -202,7 +203,7 @@ public class ConfigurationDialog extends JDialog {
         boolean traySupported = SystemTray.isSupported();
         trayNotificationsCheckBox.setEnabled(traySupported);
         trayNotificationsCheckBox.setToolTipText(traySupported
-            ? "Show a system tray notification a few minutes before a profile's AWS credentials expire"
+            ? "Show a system tray notification when a profile's AWS credentials are about to expire (see the warning time below)"
             : "System tray is not available on this platform/environment");
         panel.add(trayNotificationsCheckBox, gbc);
 
@@ -215,6 +216,23 @@ public class ConfigurationDialog extends JDialog {
                 + "renewal attempt; profiles that need an interactive login step (e.g. MFA) will keep "
                 + "failing until refreshed manually.");
         panel.add(autoRenewPinnedProfilesCheckBox, gbc);
+
+        gbc.gridy = 2; gbc.gridwidth = 1;
+        JLabel expiryWarningLabel = new JLabel("Warn when credentials expire within:");
+        expiryWarningLabel.setDisplayedMnemonic(KeyEvent.VK_W);
+        panel.add(expiryWarningLabel, gbc);
+        gbc.gridx = 1;
+        expiryWarningComboBox = new JComboBox<>(DatabaseManager.EXPIRY_WARNING_CHOICES.toArray(new Integer[0]));
+        expiryWarningComboBox.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                return super.getListCellRendererComponent(list, value + " minutes", index, isSelected, cellHasFocus);
+            }
+        });
+        expiryWarningComboBox.setToolTipText("How early a profile counts as \"expiring soon\": its status turns amber, "
+            + "the tray notification fires, auto-renew kicks in, and Refresh Expiring/Expired includes it");
+        expiryWarningLabel.setLabelFor(expiryWarningComboBox);
+        panel.add(expiryWarningComboBox, gbc);
 
         return panel;
     }
@@ -345,6 +363,8 @@ public class ConfigurationDialog extends JDialog {
 
         autoRenewPinnedProfilesCheckBox.setSelected(databaseManager.getAutoRenewPinnedProfilesEnabled());
 
+        expiryWarningComboBox.setSelectedItem(databaseManager.getExpiryWarningMinutes());
+
         startMinimizedCheckBox.setSelected(databaseManager.getStartMinimizedToTray());
 
         showStartupTipsCheckBox.setSelected(databaseManager.getShowStartupTips());
@@ -382,6 +402,8 @@ public class ConfigurationDialog extends JDialog {
 
                 boolean autoRenewPinnedProfiles = autoRenewPinnedProfilesCheckBox.isSelected();
                 databaseManager.setAutoRenewPinnedProfilesEnabled(autoRenewPinnedProfiles);
+
+                databaseManager.setExpiryWarningMinutes((Integer) expiryWarningComboBox.getSelectedItem());
 
                 boolean startMinimized = startMinimizedCheckBox.isSelected();
                 databaseManager.setStartMinimizedToTray(startMinimized);

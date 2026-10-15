@@ -81,6 +81,7 @@ class ProfileBundleTest {
             use_fastpass = yes
             tray_notifications_enabled = false
             credential_export_format = FISH
+            expiry_warning_minutes = 7
             [samlsts dev]
             accountnumber = 111111111111
             """);
@@ -89,6 +90,14 @@ class ProfileBundleTest {
 
         assertEquals(Map.of("password_expiration_minutes", "60", "tray_notifications_enabled", "false"), bundle.settings());
         assertEquals(Map.of("accountnumber", "111111111111"), bundle.profiles().get("dev"));
+    }
+
+    @Test
+    void expiryWarningMinutes_travelsWithExportWhenValid(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("export.ini");
+        ProfileBundle.of("1.0.0", sections(), Map.of("expiry_warning_minutes", "15"), List.of()).write(file);
+
+        assertEquals("15", ProfileBundle.read(file).settings().get("expiry_warning_minutes"));
     }
 
     @Test

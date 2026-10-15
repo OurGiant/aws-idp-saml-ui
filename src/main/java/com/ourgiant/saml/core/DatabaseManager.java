@@ -282,6 +282,27 @@ public class DatabaseManager {
         setConfig("last_seen_whats_new_version", version);
     }
 
+    /** Lead-time choices for "expiring soon" (#228), in minutes; the first is the default. */
+    public static final java.util.List<Integer> EXPIRY_WARNING_CHOICES = java.util.List.of(5, 10, 15, 30);
+
+    /**
+     * How many minutes before expiry a profile counts as "expiring soon": the amber status, the
+     * expiry notification, auto-renew of pinned profiles, and Refresh Expiring/Expired.
+     */
+    public int getExpiryWarningMinutes() {
+        try {
+            String value = getConfig("expiry_warning_minutes");
+            int minutes = value != null ? Integer.parseInt(value.trim()) : EXPIRY_WARNING_CHOICES.get(0);
+            return EXPIRY_WARNING_CHOICES.contains(minutes) ? minutes : EXPIRY_WARNING_CHOICES.get(0);
+        } catch (NumberFormatException e) {
+            return EXPIRY_WARNING_CHOICES.get(0);
+        }
+    }
+
+    public void setExpiryWarningMinutes(int minutes) {
+        setConfig("expiry_warning_minutes", String.valueOf(minutes));
+    }
+
     public boolean getShowStartupTips() {
         return !"false".equalsIgnoreCase(getConfig("show_startup_tips")); // On by default: new users benefit most (#211)
     }
