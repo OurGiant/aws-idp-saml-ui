@@ -77,7 +77,8 @@ public class BatchRefreshRunner {
                     + " (" + representativeProfile + "): ";
             progressCallback.accept(loginPrefix + "starting...");
 
-            SamlAuthenticator authenticator = new SamlAuthenticator(configManager, credentialManager, passwordManager);
+            SamlAuthenticator authenticator = new SamlAuthenticator(configManager, credentialManager, passwordManager,
+                databaseManager.getWriteRegionToAwsConfigEnabled() ? AwsConfigFile.forCurrentUser() : null);
             onActiveAuthenticatorChanged.accept(authenticator);
             String assertion;
             try {

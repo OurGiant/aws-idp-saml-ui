@@ -36,6 +36,7 @@ public class ConfigurationDialog extends JDialog {
     private JCheckBox trayNotificationsCheckBox;
     private JCheckBox autoRenewPinnedProfilesCheckBox;
     private JCheckBox startMinimizedCheckBox;
+    private JCheckBox writeRegionToAwsConfigCheckBox;
     private JButton forceRefreshButton;
     private JButton saveButton;
     private JButton cancelButton;
@@ -237,7 +238,16 @@ public class ConfigurationDialog extends JDialog {
         JPanel panel = titledPanel("Data");
         GridBagConstraints gbc = sectionGbc();
 
-        gbc.gridx = 1; gbc.gridy = 0; gbc.anchor = GridBagConstraints.EAST;
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 1.0;
+        writeRegionToAwsConfigCheckBox = new JCheckBox("Add each profile's region to ~/.aws/config");
+        writeRegionToAwsConfigCheckBox.setMnemonic(KeyEvent.VK_W);
+        writeRegionToAwsConfigCheckBox.setToolTipText(
+            "After saving credentials, add a region line to the profile's section of the AWS CLI config file "
+                + "if it has none, so 'aws --profile <name>' works without 'aws configure'. Existing regions "
+                + "and everything else in the file are never changed.");
+        panel.add(writeRegionToAwsConfigCheckBox, gbc);
+
+        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0; gbc.anchor = GridBagConstraints.EAST;
         forceRefreshButton = new JButton("Force Refresh");
         forceRefreshButton.setMnemonic(KeyEvent.VK_F);
         forceRefreshButton.addActionListener(e -> forceRefreshProfiles());
@@ -328,6 +338,8 @@ public class ConfigurationDialog extends JDialog {
 
         startMinimizedCheckBox.setSelected(databaseManager.getStartMinimizedToTray());
 
+        writeRegionToAwsConfigCheckBox.setSelected(databaseManager.getWriteRegionToAwsConfigEnabled());
+
         updatePasswordExpirationEnabled();
     }
 
@@ -363,8 +375,11 @@ public class ConfigurationDialog extends JDialog {
                 boolean startMinimized = startMinimizedCheckBox.isSelected();
                 databaseManager.setStartMinimizedToTray(startMinimized);
 
-                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}, tray_notifications = {}, auto_renew_pinned_profiles = {}, start_minimized_to_tray = {}",
-                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass, trayNotificationsEnabled, autoRenewPinnedProfiles, startMinimized);
+                boolean writeRegionToAwsConfig = writeRegionToAwsConfigCheckBox.isSelected();
+                databaseManager.setWriteRegionToAwsConfigEnabled(writeRegionToAwsConfig);
+
+                logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}, tray_notifications = {}, auto_renew_pinned_profiles = {}, start_minimized_to_tray = {}, write_region_to_aws_config = {}",
+                    durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass, trayNotificationsEnabled, autoRenewPinnedProfiles, startMinimized, writeRegionToAwsConfig);
 
                 // Apply theme immediately — ThemeManager refreshes all open windows,
                 // including this dialog, so it re-themes live.
