@@ -9,6 +9,8 @@ import com.ourgiant.saml.core.CredentialManager;
 import com.ourgiant.saml.core.CredentialRequestError;
 import com.ourgiant.saml.core.DatabaseManager;
 import com.ourgiant.saml.core.PasswordManager;
+import com.ourgiant.saml.core.ProfileBundle;
+import com.ourgiant.saml.core.ProfileBundleImporter;
 import com.ourgiant.saml.core.SamlAuthenticator;
 import com.ourgiant.saml.core.TokenStateManager;
 import com.ourgiant.saml.core.WebDriverFactory;
@@ -457,6 +459,20 @@ public class SwingMain extends JFrame {
 
         fileMenu.addSeparator();
 
+        JMenuItem exportProfilesMenuItem = new JMenuItem("Export Profiles...");
+        exportProfilesMenuItem.setMnemonic(KeyEvent.VK_E);
+        exportProfilesMenuItem.setToolTipText("Save profiles, identity providers and app settings to a file (no credentials or passwords)");
+        exportProfilesMenuItem.addActionListener(e -> exportProfiles());
+        fileMenu.add(exportProfilesMenuItem);
+
+        JMenuItem importProfilesMenuItem = new JMenuItem("Import Profiles...");
+        importProfilesMenuItem.setMnemonic(KeyEvent.VK_I);
+        importProfilesMenuItem.setToolTipText("Add profiles (and optionally app settings) from an exported file");
+        importProfilesMenuItem.addActionListener(e -> importProfiles());
+        fileMenu.add(importProfilesMenuItem);
+
+        fileMenu.addSeparator();
+
         JMenuItem viewLogsMenuItem = new JMenuItem("View Logs...");
         viewLogsMenuItem.setMnemonic(KeyEvent.VK_L);
         viewLogsMenuItem.addActionListener(e -> new LogViewerDialog(this).setVisible(true));
@@ -498,6 +514,105 @@ public class SwingMain extends JFrame {
         menuBar.add(actionsMenu);
 
         return menuBar;
+    }
+
+    private static final String PROFILE_EXPORT_FILE_NAME = "aws-idp-saml-ui-profiles.ini";
+
+    private JFileChooser profileExportChooser() {
+        JFileChooser chooser = new JFileChooser(System.getProperty("user.home"));
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Profile exports (*.ini)", "ini"));
+        return chooser;
+    }
+
+    private void exportProfiles() {
+        JFileChooser chooser = profileExportChooser();
+        chooser.setDialogTitle("Export Profiles");
+        chooser.setSelectedFile(new java.io.File(System.getProperty("user.home"), PROFILE_EXPORT_FILE_NAME));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.nio.file.Path file = chooser.getSelectedFile().toPath();
+        if (!file.getFileName().toString().contains(".")) {
+            file = file.resolveSibling(file.getFileName() + ".ini");
+        }
+        if (java.nio.file.Files.exists(file) && JOptionPane.showConfirmDialog(this,
+                file.getFileName() + " already exists. Replace it?", "Export Profiles",
+                JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION) {
+            return;
+        }
+        exportProfilesTo(file);
+    }
+
+    /** Writes the export and reports it; separate from the file chooser so it can be driven directly. */
+    void exportProfilesTo(java.nio.file.Path file) {
+        try {
+            Map<String, String> settings = new HashMap<>();
+            for (String key : ProfileBundle.EXPORTED_SETTINGS) {
+                settings.put(key, databaseManager.getConfig(key));
+            }
+            Set<String> profiles = new HashSet<>(configManager.getAvailableProfiles());
+            List<String> pinned = databaseManager.getPinnedProfilesInOrder().stream().filter(profiles::contains).toList();
+            ProfileBundle bundle = ProfileBundle.of(AboutDialog.resolveCurrentVersion(), configManager.getAllSections(),
+                settings, pinned);
+            bundle.write(file);
+            logger.info("Exported {} profile(s) to {}", bundle.profiles().size(), file);
+            statusLabel.setText("Exported " + bundle.profiles().size() + " profile(s) to " + file);
+            JOptionPane.showMessageDialog(this,
+                "Exported " + bundle.profiles().size() + " profile(s), identity providers and app settings to:\n" + file
+                    + "\n\nThe file contains no credentials, passwords or encryption keys.",
+                "Profiles Exported", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            logger.error("Failed to export profiles to {}", file, ex);
+            JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(), "Export Failed", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void importProfiles() {
+        JFileChooser chooser = profileExportChooser();
+        chooser.setDialogTitle("Import Profiles");
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        importProfilesFrom(chooser.getSelectedFile().toPath());
+    }
+
+    /** Previews and imports from an export file; separate from the file chooser so it can be driven directly. */
+    void importProfilesFrom(java.nio.file.Path file) {
+        ProfileBundle bundle;
+        try {
+            bundle = ProfileBundle.read(file);
+        } catch (java.io.IOException ex) {
+            logger.warn("Can't import profiles from {}", file, ex);
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Can't Import", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (bundle.profiles().isEmpty()) {
+            JOptionPane.showMessageDialog(this, file.getFileName() + " doesn't contain any profiles.",
+                "Nothing To Import", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        ProfileImportDialog dialog = new ProfileImportDialog(this, configManager, databaseManager, bundle, file);
+        dialog.setVisible(true);
+        ProfileBundleImporter.Result result = dialog.getResult();
+        if (result == null) {
+            return;
+        }
+        loadProfiles();
+        refreshStatusTable();
+        StringBuilder summary = new StringBuilder("Imported " + result.importedProfiles().size() + " profile(s): "
+            + String.join(", ", result.importedProfiles()));
+        if (!result.overwrittenProfiles().isEmpty()) {
+            summary.append("\nOverwrote: ").append(String.join(", ", result.overwrittenProfiles()));
+        }
+        if (!result.providersAdded().isEmpty()) {
+            summary.append("\nAdded identity providers: ").append(String.join(", ", result.providersAdded()));
+        }
+        if (result.settingsApplied()) {
+            summary.append("\nApp settings and pinned profiles were imported.");
+        }
+        statusLabel.setText("Imported " + result.importedProfiles().size() + " profile(s) from " + file.getFileName());
+        JOptionPane.showMessageDialog(this, summary.toString(), "Profiles Imported", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void showAboutDialog() {
