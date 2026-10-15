@@ -32,6 +32,7 @@ that touches AWS console/CLI access.
 **Interface**
 - FlatLaf-based UI with multiple light/dark themes
 - System tray integration, including start-minimized-to-tray and a macOS Dock reopen fallback
+- Remembers the main window's size, position, and maximized state between launches (moved back on-screen if its monitor is gone)
 - Silent background check for new releases, with an in-app prompt when one is available
 
 **Security**
