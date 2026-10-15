@@ -1,6 +1,8 @@
 package com.ourgiant.saml.gui;
 
+import com.ourgiant.saml.core.CredentialExportFormat;
 import com.ourgiant.saml.core.CredentialManager;
+import com.ourgiant.saml.core.DatabaseManager;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,11 +22,13 @@ public class CredentialsDialog extends JDialog {
     private final CredentialManager.AwsCredentials credentials;
     private final boolean showEncrypted;
     private final boolean showPlaintext;
+    private final DatabaseManager databaseManager;
 
     public CredentialsDialog(Frame parent, CredentialManager.AwsCredentials credentials,
-                           boolean showEncrypted, boolean showPlaintext) {
+                           boolean showEncrypted, boolean showPlaintext, DatabaseManager databaseManager) {
         super(parent, "AWS Credentials", true);
         this.credentials = credentials;
+        this.databaseManager = databaseManager;
         this.showEncrypted = showEncrypted;
         this.showPlaintext = showPlaintext;
 
@@ -72,14 +76,43 @@ public class CredentialsDialog extends JDialog {
         textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         textArea.setEditable(false);
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("⚠️  WARNING: These credentials contain sensitive information\n");
-        sb.append("They will appear in shell history and should not be used in production\n\n");
-        sb.append("AWS_ACCESS_KEY_ID=").append(credentials.getAccessKeyId()).append("\n");
-        sb.append("AWS_SECRET_ACCESS_KEY=").append(credentials.getSecretAccessKey()).append("\n");
-        sb.append("AWS_SESSION_TOKEN=").append(credentials.getSessionToken()).append("\n");
+        // The warning lives outside the text area so Copy to Clipboard yields only lines a shell can run.
+        JLabel warningLabel = new JLabel("<html>⚠️ These credentials are sensitive. Pasting them into a terminal "
+            + "may record them in shell history; don't use them in production.</html>");
 
-        textArea.setText(sb.toString());
+        JComboBox<CredentialExportFormat> formatComboBox = new JComboBox<>(CredentialExportFormat.values());
+        formatComboBox.setSelectedItem(CredentialExportFormat.fromName(
+            databaseManager != null ? databaseManager.getCredentialExportFormat() : null, System.getProperty("os.name")));
+        formatComboBox.setToolTipText("Shell syntax for the lines below, so they can be pasted straight into a terminal");
+        Runnable render = () -> {
+            CredentialExportFormat format = (CredentialExportFormat) formatComboBox.getSelectedItem();
+            textArea.setText(format.format(credentials.getAccessKeyId(), credentials.getSecretAccessKey(),
+                credentials.getSessionToken()));
+            textArea.setCaretPosition(0);
+        };
+        render.run();
+        formatComboBox.addActionListener(e -> {
+            render.run();
+            if (databaseManager != null) {
+                try {
+                    databaseManager.setCredentialExportFormat(((CredentialExportFormat) formatComboBox.getSelectedItem()).name());
+                } catch (Exception ex) {
+                    logger.warn("Failed to save credential export format", ex);
+                }
+            }
+        });
+
+        JLabel formatLabel = new JLabel("Format:");
+        formatLabel.setDisplayedMnemonic(KeyEvent.VK_F);
+        formatLabel.setLabelFor(formatComboBox);
+        JPanel formatPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        formatPanel.add(formatLabel);
+        formatPanel.add(formatComboBox);
+
+        JPanel headerPanel = new JPanel(new BorderLayout(0, 6));
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
+        headerPanel.add(warningLabel, BorderLayout.NORTH);
+        headerPanel.add(formatPanel, BorderLayout.SOUTH);
 
         JButton copyButton = new JButton("Copy to Clipboard");
         copyButton.setMnemonic(KeyEvent.VK_C);
@@ -88,6 +121,7 @@ public class CredentialsDialog extends JDialog {
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         buttonPanel.add(copyButton);
 
+        section.add(headerPanel, BorderLayout.NORTH);
         section.add(new JScrollPane(textArea), BorderLayout.CENTER);
         section.add(buttonPanel, BorderLayout.SOUTH);
 

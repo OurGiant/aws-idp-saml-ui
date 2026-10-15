@@ -1564,7 +1564,7 @@ public class SwingMain extends JFrame {
             return;
         }
 
-        CredentialsDialog dialog = new CredentialsDialog(this, credentials, showEncrypted, showPlaintext);
+        CredentialsDialog dialog = new CredentialsDialog(this, credentials, showEncrypted, showPlaintext, databaseManager);
         dialog.setVisible(true);
     }
 

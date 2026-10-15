@@ -125,6 +125,12 @@ encrypted, hybrid AES/RSA-encoded string suitable for pasting into another
 tool's input (for example, an automated deployment script) without exposing
 the raw access key, secret key, or session token.
 
+**Show Credentials** displays them in plaintext as ready-to-paste shell
+commands. A **Format** selector switches between bash/zsh (`export …`),
+PowerShell (`$env:… = '…'`), Command Prompt (`set "…"`), and plain `KEY=value`
+lines for `.env` files. Values are quoted for the chosen shell. The default
+is the platform's native shell, and the last choice is remembered.
+
 ## Security
 
 This app handles two categories of sensitive data — the Okta password (if

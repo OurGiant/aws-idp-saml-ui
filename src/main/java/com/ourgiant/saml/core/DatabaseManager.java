@@ -253,6 +253,16 @@ public class DatabaseManager {
         setConfig("main_window_bounds", bounds);
     }
 
+    // Intentionally not seeded: an absent value means the user hasn't picked one, so the dialog
+    // uses the platform's native shell (see CredentialExportFormat.defaultFor).
+    public String getCredentialExportFormat() {
+        return getConfig("credential_export_format");
+    }
+
+    public void setCredentialExportFormat(String format) {
+        setConfig("credential_export_format", format);
+    }
+
     public boolean getStartMinimizedToTray() {
         String value = getConfig("start_minimized_to_tray");
         return "true".equalsIgnoreCase(value); // Disabled by default
