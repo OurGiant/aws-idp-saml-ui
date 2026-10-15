@@ -182,6 +182,54 @@ class ConfigManagerTest {
     }
 
     @Test
+    void getSessionDuration_profileOverrideWinsOverGlobalDefault() throws Exception {
+        writeSamlsts("""
+                [global]
+                sessionduration = 1800
+
+                [short]
+                sessionduration = 3600
+
+                [inherits]
+                accountnumber = 111111111111
+
+                [broken]
+                sessionduration = soon
+                """);
+        configManager = new ConfigManager();
+        Field field = ConfigManager.class.getDeclaredField("databaseManager");
+        field.setAccessible(true);
+        ((DatabaseManager) field.get(configManager)).setSessionDuration(7200);
+
+        assertEquals(3600, configManager.getSessionDuration("short"));
+        assertEquals(Integer.valueOf(3600), configManager.getProfileSessionDuration("short"));
+        assertEquals(7200, configManager.getSessionDuration("inherits"), "no override: the Configuration default");
+        assertEquals(null, configManager.getProfileSessionDuration("inherits"));
+        assertEquals(7200, configManager.getSessionDuration("broken"), "an invalid override falls back to the default");
+        assertEquals(7200, configManager.getDefaultSessionDuration());
+    }
+
+    @Test
+    void saveProfile_canRemoveAnOverride() throws Exception {
+        writeSamlsts("""
+                [global]
+                username = x
+
+                [p]
+                accountnumber = 111111111111
+                sessionduration = 3600
+                """);
+        configManager = new ConfigManager();
+
+        configManager.saveProfile("p", Map.of("guiname", "P"), java.util.Set.of("sessionduration"));
+
+        assertEquals(null, configManager.getProfileSessionDuration("p"));
+        String written = readSamlsts();
+        assertFalse(written.contains("sessionduration"), written);
+        assertTrue(written.contains("guiname = P") && written.contains("accountnumber = 111111111111"), written);
+    }
+
+    @Test
     void getAwsRegion_defaultsToUsEast1WhenUnset() throws Exception {
         writeSamlsts("""
                 [global]

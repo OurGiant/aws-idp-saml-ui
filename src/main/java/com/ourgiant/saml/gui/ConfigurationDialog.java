@@ -95,7 +95,7 @@ public class ConfigurationDialog extends JDialog {
         GridBagConstraints gbc = sectionGbc();
 
         gbc.gridx = 0; gbc.gridy = 0;
-        panel.add(new JLabel("Duration (minutes):"), gbc);
+        panel.add(new JLabel("Default duration (minutes):"), gbc);
 
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         durationSpinner = new JSpinner(new SpinnerNumberModel(
@@ -104,7 +104,8 @@ public class ConfigurationDialog extends JDialog {
             databaseManager.getMaxDuration() / 60,
             15
         ));
-        durationSpinner.setToolTipText("How long requested AWS credentials remain valid before they expire");
+        durationSpinner.setToolTipText("How long requested AWS credentials remain valid before they expire. "
+            + "A profile can override this in Manage Profiles → Edit.");
         panel.add(durationSpinner, gbc);
 
         return panel;
