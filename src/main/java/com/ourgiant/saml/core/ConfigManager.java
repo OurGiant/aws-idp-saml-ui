@@ -64,7 +64,7 @@ public class ConfigManager {
         Set<String> sections = config.keySet();
 
         for (String section : sections) {
-            if (!section.startsWith("Fed-") && !section.equalsIgnoreCase("global")) {
+            if (!ConfigSections.isSettingsSection(section)) {
                 profiles.add(section);
             }
         }
@@ -238,7 +238,7 @@ public class ConfigManager {
     public List<String> getIdpProviders() {
         List<String> idps = new ArrayList<>();
         for (String section : config.keySet()) {
-            if (section.startsWith("Fed-")) {
+            if (ConfigSections.isProvider(section)) {
                 idps.add(section);
             }
         }
@@ -256,6 +256,46 @@ public class ConfigManager {
         }
         for (Map.Entry<String, String> entry : fields.entrySet()) {
             section.put(entry.getKey(), entry.getValue());
+        }
+        persistConfig();
+    }
+
+    /** Every samlsts section (global, identity providers, profiles) as plain maps, in file order. */
+    public Map<String, Map<String, String>> getAllSections() {
+        Map<String, Map<String, String>> sections = new java.util.LinkedHashMap<>();
+        for (String name : config.keySet()) {
+            Profile.Section section = config.get(name);
+            Map<String, String> fields = new java.util.LinkedHashMap<>();
+            for (String key : section.keySet()) {
+                fields.put(key, section.get(key));
+            }
+            sections.put(name, fields);
+        }
+        return sections;
+    }
+
+    /**
+     * Applies an import (#199) with a single write: each section in {@code replaceWhole} replaces
+     * any existing section of that name entirely; each in {@code addMissingKeys} only gains keys
+     * that section doesn't already have.
+     */
+    public void importSections(Map<String, Map<String, String>> replaceWhole,
+                               Map<String, Map<String, String>> addMissingKeys) throws Exception {
+        for (Map.Entry<String, Map<String, String>> entry : replaceWhole.entrySet()) {
+            config.remove(entry.getKey());
+            Profile.Section section = config.add(entry.getKey());
+            entry.getValue().forEach(section::put);
+        }
+        for (Map.Entry<String, Map<String, String>> entry : addMissingKeys.entrySet()) {
+            Profile.Section section = config.get(entry.getKey());
+            if (section == null) {
+                section = config.add(entry.getKey());
+            }
+            for (Map.Entry<String, String> field : entry.getValue().entrySet()) {
+                if (!section.containsKey(field.getKey())) {
+                    section.put(field.getKey(), field.getValue());
+                }
+            }
         }
         persistConfig();
     }
