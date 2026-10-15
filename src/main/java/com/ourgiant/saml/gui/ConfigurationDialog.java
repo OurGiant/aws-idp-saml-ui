@@ -36,6 +36,7 @@ public class ConfigurationDialog extends JDialog {
     private JCheckBox trayNotificationsCheckBox;
     private JCheckBox autoRenewPinnedProfilesCheckBox;
     private JCheckBox startMinimizedCheckBox;
+    private JCheckBox showStartupTipsCheckBox;
     private JCheckBox writeRegionToAwsConfigCheckBox;
     private JButton forceRefreshButton;
     private JButton saveButton;
@@ -231,6 +232,13 @@ public class ConfigurationDialog extends JDialog {
             : "System tray is not available on this platform/environment");
         panel.add(startMinimizedCheckBox, gbc);
 
+        gbc.gridy = 1;
+        showStartupTipsCheckBox = new JCheckBox("Show usage tips on startup");
+        showStartupTipsCheckBox.setMnemonic(KeyEvent.VK_I);
+        showStartupTipsCheckBox.setToolTipText("Show a tip about a feature that's easy to miss when the app opens. "
+            + "Tips are always available from Help → Usage Tips.");
+        panel.add(showStartupTipsCheckBox, gbc);
+
         return panel;
     }
 
@@ -338,6 +346,8 @@ public class ConfigurationDialog extends JDialog {
 
         startMinimizedCheckBox.setSelected(databaseManager.getStartMinimizedToTray());
 
+        showStartupTipsCheckBox.setSelected(databaseManager.getShowStartupTips());
+
         writeRegionToAwsConfigCheckBox.setSelected(databaseManager.getWriteRegionToAwsConfigEnabled());
 
         updatePasswordExpirationEnabled();
@@ -374,6 +384,8 @@ public class ConfigurationDialog extends JDialog {
 
                 boolean startMinimized = startMinimizedCheckBox.isSelected();
                 databaseManager.setStartMinimizedToTray(startMinimized);
+
+                databaseManager.setShowStartupTips(showStartupTipsCheckBox.isSelected());
 
                 boolean writeRegionToAwsConfig = writeRegionToAwsConfigCheckBox.isSelected();
                 databaseManager.setWriteRegionToAwsConfigEnabled(writeRegionToAwsConfig);

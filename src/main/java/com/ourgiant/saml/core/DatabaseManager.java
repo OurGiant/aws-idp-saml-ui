@@ -282,6 +282,28 @@ public class DatabaseManager {
         setConfig("last_seen_whats_new_version", version);
     }
 
+    public boolean getShowStartupTips() {
+        return !"false".equalsIgnoreCase(getConfig("show_startup_tips")); // On by default: new users benefit most (#211)
+    }
+
+    public void setShowStartupTips(boolean show) {
+        setConfig("show_startup_tips", String.valueOf(show));
+    }
+
+    /** Which usage tip to show first next time, so each launch starts on a different tip. */
+    public int getUsageTipsNextIndex() {
+        try {
+            String value = getConfig("usage_tips_next_index");
+            return value != null ? Integer.parseInt(value) : 0;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    public void setUsageTipsNextIndex(int index) {
+        setConfig("usage_tips_next_index", String.valueOf(index));
+    }
+
     public boolean getStartMinimizedToTray() {
         String value = getConfig("start_minimized_to_tray");
         return "true".equalsIgnoreCase(value); // Disabled by default

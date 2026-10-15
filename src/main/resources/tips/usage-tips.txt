@@ -1,0 +1,36 @@
+# Usage tips shown at startup and via Help > Usage Tips (#211).
+# Each tip: a title line, then its body (simple HTML allowed). Tips are separated by a line of three dashes.
+# Lines starting with # are comments. Keep each tip short; update these with each release.
+---
+Create profiles straight from your identity provider
+Open <i>File &rarr; Manage Profiles...</i> and choose <b>Import from IdP...</b>. Log in once and every AWS role you're granted is listed; tick the ones you want and they become profiles. No account numbers or role names to look up.
+---
+Pin the profiles you use most
+Right-click a row in the status table and choose <b>Pin Profile</b>, or drag a row to the top. Pinned profiles stay at the top of the table whatever the filter, and appear in the tray menu.
+---
+Work from the tray
+With the window closed, the tray icon's menu has each pinned profile with its status, plus <b>Request Credentials</b>, <b>Open Console</b> and <b>Refresh Expiring/Expired Profiles</b>. Results arrive as notifications.
+---
+Right-click for quick actions
+Right-click any row in the status table to request or show credentials, open the AWS Console, <b>copy the account number</b>, pin the profile, or delete it.
+---
+Paste credentials straight into a terminal
+<b>Show Credentials</b> has a <i>Format</i> menu for bash/zsh, PowerShell, Command Prompt and plain <code>.env</code> lines. <b>Copy to Clipboard</b> copies just the commands, ready to paste.
+---
+Refresh several profiles at once
+<i>Actions &rarr; Refresh Expiring/Expired Profiles...</i> renews everything that has run out or is about to. To have pinned profiles renewed for you, turn on <b>auto-renew</b> in <i>File &rarr; Configuration</i>.
+---
+Find a profile quickly
+Type in the <b>Filter</b> box above the status table to narrow it by name, and use the status checkboxes to show only valid, expired or unknown profiles. Click a column header to sort.
+---
+Move to a new machine, or share a setup
+<i>File &rarr; Export Profiles...</i> saves your profiles and settings to a file; <i>Import Profiles...</i> loads it elsewhere. The file never contains credentials or passwords.
+---
+Use the AWS CLI right away
+After you request credentials, the profile's region is added to <code>~/.aws/config</code> if it has none, so <code>aws --profile &lt;name&gt; ...</code> just works. You can turn this off in <i>File &rarr; Configuration</i>.
+---
+Keyboard shortcuts
+<b>Ctrl+P</b> opens Manage Profiles, <b>Ctrl+,</b> opens Configuration, and <b>Ctrl+Q</b> exits. Menus and buttons also have underlined Alt-key mnemonics.
+---
+Something not working?
+<i>Help &rarr; View Logs...</i> shows what the app has been doing, including a startup log if it ever fails to open. <b>Open Log Folder</b> takes you to the files to share when asking for help.
