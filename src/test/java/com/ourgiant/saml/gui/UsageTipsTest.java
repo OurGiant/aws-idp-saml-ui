@@ -45,6 +45,7 @@ class UsageTipsTest {
         List<UsageTips.Tip> tips = UsageTips.load();
 
         assertTrue(tips.size() >= 5, "expected the bundled tips, got " + tips.size());
+        assertEquals(tips.size(), tips.stream().map(UsageTips.Tip::title).distinct().count(), "duplicate tip titles");
         for (UsageTips.Tip tip : tips) {
             assertFalse(tip.title().isBlank());
             assertFalse(tip.bodyHtml().isBlank(), tip.title());
