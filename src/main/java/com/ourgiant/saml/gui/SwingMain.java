@@ -1353,6 +1353,10 @@ public class SwingMain extends JFrame {
         openConsoleItem.addActionListener(e -> openAwsConsoleForProfile(contextMenuTargetProfile));
         menu.add(openConsoleItem);
 
+        JMenuItem copyAccountItem = new JMenuItem("Copy Account Number");
+        copyAccountItem.addActionListener(e -> copyAccountNumberForProfile(contextMenuTargetProfile));
+        menu.add(copyAccountItem);
+
         menu.addSeparator();
 
         JMenuItem pinItem = new JMenuItem("Pin Profile");
@@ -1377,6 +1381,7 @@ public class SwingMain extends JFrame {
                 showItem.setEnabled(hasCredentials);
                 showEncryptedItem.setEnabled(hasCredentials && hasPublicKey);
                 openConsoleItem.setEnabled(hasCredentials);
+                copyAccountItem.setEnabled(profile != null && hasAccountNumber(profile));
                 pinItem.setText(profile != null && databaseManager.isProfilePinned(profile)
                     ? "Unpin Profile" : "Pin Profile");
                 pinItem.setEnabled(profile != null);
@@ -1393,6 +1398,30 @@ public class SwingMain extends JFrame {
         });
 
         return menu;
+    }
+
+    private boolean hasAccountNumber(String profileName) {
+        String accountNumber = configManager.getAccountNumber(profileName);
+        return accountNumber != null && !accountNumber.isBlank();
+    }
+
+    private void copyAccountNumberForProfile(String profileName) {
+        if (profileName == null) {
+            return;
+        }
+        String accountNumber = configManager.getAccountNumber(profileName);
+        if (accountNumber == null || accountNumber.isBlank()) {
+            statusLabel.setText("No account number configured for \"" + profileName + "\".");
+            return;
+        }
+        try {
+            StringSelection selection = new StringSelection(accountNumber.trim());
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+            statusLabel.setText("Copied account number for \"" + profileName + "\" to clipboard.");
+        } catch (Exception ex) {
+            logger.error("Failed to copy account number to clipboard for profile: {}", profileName, ex);
+            statusLabel.setText("Failed to copy account number: " + ex.getMessage());
+        }
     }
 
     private void deleteProfileFromContextMenu(String profileName) {
