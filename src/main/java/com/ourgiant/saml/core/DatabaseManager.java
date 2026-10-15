@@ -312,6 +312,15 @@ public class DatabaseManager {
         setConfig("status_table_show_gui_name", String.valueOf(show));
     }
 
+    /** Remove app-managed profiles' credentials when the app exits (#224); off by default. */
+    public boolean getClearCredentialsOnExit() {
+        return "true".equalsIgnoreCase(getConfig("clear_credentials_on_exit"));
+    }
+
+    public void setClearCredentialsOnExit(boolean clear) {
+        setConfig("clear_credentials_on_exit", String.valueOf(clear));
+    }
+
     public boolean getShowStartupTips() {
         return !"false".equalsIgnoreCase(getConfig("show_startup_tips")); // On by default: new users benefit most (#211)
     }

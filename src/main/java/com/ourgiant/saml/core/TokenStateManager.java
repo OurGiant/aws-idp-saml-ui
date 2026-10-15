@@ -17,6 +17,11 @@ public class TokenStateManager {
         databaseManager.updateExpiration(profileName, expiration);
     }
 
+    /** Forgets a profile's saved expiry (its credentials were cleared, #224). */
+    public void clearExpiration(String profileName) {
+        databaseManager.deleteProfileState(profileName);
+    }
+
     public Instant getExpiration(String profileName) {
         return databaseManager.getExpiration(profileName);
     }
