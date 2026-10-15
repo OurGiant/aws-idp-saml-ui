@@ -32,6 +32,8 @@ class CredentialRequestErrorTest {
         assertTrue(html.indexOf("<b>111111111111 / ReadOnly</b> (same account)") < html.indexOf("333333333333 / Billing"), html);
         assertTrue(html.contains("a likely match is highlighted below"), html);
         assertTrue(error.statusMessage().contains("closest: 111111111111/ReadOnly"), error.statusMessage());
+        assertTrue(error.guidance().startsWith("The identity provider didn't return the role"), error.guidance());
+        assertFalse(error.guidance().contains("Matching role not found"), error.guidance());
     }
 
     @Test

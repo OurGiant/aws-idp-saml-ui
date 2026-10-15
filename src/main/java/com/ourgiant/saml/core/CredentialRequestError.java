@@ -195,6 +195,11 @@ public class CredentialRequestError {
         return title;
     }
 
+    /** The plain-language explanation, without the technical detail (e.g. for a tray notification). */
+    public String guidance() {
+        return guidance;
+    }
+
     public int iconMessageType() {
         return iconMessageType;
     }
