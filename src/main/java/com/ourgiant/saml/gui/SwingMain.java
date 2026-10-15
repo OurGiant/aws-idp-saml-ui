@@ -11,6 +11,7 @@ import com.ourgiant.saml.core.PasswordManager;
 import com.ourgiant.saml.core.SamlAuthenticator;
 import com.ourgiant.saml.core.TokenStateManager;
 import com.ourgiant.saml.core.WebDriverFactory;
+import com.ourgiant.saml.util.StartupLog;
 
 import com.formdev.flatlaf.FlatLaf;
 import org.openqa.selenium.WebDriver;
@@ -365,6 +366,11 @@ public class SwingMain extends JFrame {
         fileMenu.add(configMenuItem);
 
         fileMenu.addSeparator();
+
+        JMenuItem viewLogsMenuItem = new JMenuItem("View Logs...");
+        viewLogsMenuItem.setMnemonic(KeyEvent.VK_L);
+        viewLogsMenuItem.addActionListener(e -> new LogViewerDialog(this).setVisible(true));
+        fileMenu.add(viewLogsMenuItem);
 
         JMenuItem aboutMenuItem = new JMenuItem("About...");
         aboutMenuItem.setMnemonic(KeyEvent.VK_A);
@@ -1584,29 +1590,73 @@ public class SwingMain extends JFrame {
         System.setProperty("awt.useSystemAAFontSettings", "on");
         System.setProperty("swing.aatext", "true");
 
-        SwingUtilities.invokeLater(() -> {
-            try {
-                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-            } catch (Exception e) {
-                // Use default look and feel
-            }
-
-            if (!ConfigManager.configFileExists()) {
-                DatabaseManager.deleteIfExists();
-                FirstRunSetupDialog setup = new FirstRunSetupDialog();
-                setup.setVisible(true);
-                if (!setup.isSetupCompleted()) {
-                    System.exit(0);
-                }
-            }
-
-            SwingMain mainWindow = new SwingMain();
-            boolean startMinimized = mainWindow.trayIcon != null && mainWindow.databaseManager.getStartMinimizedToTray();
-            if (!startMinimized) {
-                mainWindow.setVisible(true);
-                syncWindowPositionWithWindowManager(mainWindow);
+        StartupLog startupLog = StartupLog.forCurrentUser();
+        startupLog.begin(AboutDialog.resolveCurrentVersion());
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            logger.error("Uncaught exception on thread {}", thread.getName(), error);
+            if (!startupLog.isFinished()) {
+                startupLog.failed("startup (thread " + thread.getName() + ")", error);
             }
         });
+
+        try {
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+                } catch (Exception e) {
+                    // Use default look and feel
+                }
+
+                try {
+                    if (!ConfigManager.configFileExists()) {
+                        DatabaseManager.deleteIfExists();
+                        FirstRunSetupDialog setup = new FirstRunSetupDialog();
+                        setup.setVisible(true);
+                        if (!setup.isSetupCompleted()) {
+                            startupLog.cancelled("first-run setup was not completed");
+                            System.exit(0);
+                        }
+                    }
+
+                    SwingMain mainWindow = new SwingMain();
+                    boolean startMinimized = mainWindow.trayIcon != null && mainWindow.databaseManager.getStartMinimizedToTray();
+                    if (!startMinimized) {
+                        mainWindow.setVisible(true);
+                        syncWindowPositionWithWindowManager(mainWindow);
+                    }
+                    startupLog.succeeded();
+                    logger.info("Startup completed");
+                } catch (Throwable t) {
+                    reportStartupFailure(startupLog, "main window initialization", t);
+                }
+            });
+        } catch (Throwable t) {
+            reportStartupFailure(startupLog, "launch", t);
+        }
+    }
+
+    /**
+     * Records a failure to start in both logs and tells the user where to find the details, since
+     * otherwise a failed launch just looks like the app never opened.
+     */
+    private static void reportStartupFailure(StartupLog startupLog, String phase, Throwable error) {
+        startupLog.failed(phase, error);
+        try {
+            logger.error("Startup failed during {}", phase, error);
+        } catch (Throwable ignored) {
+            // The startup log already has the details; nothing more to do if logging itself is broken.
+        }
+        try {
+            if (!GraphicsEnvironment.isHeadless()) {
+                JOptionPane.showMessageDialog(null,
+                    "AWS IdP SAML UI failed to start:\n" + error + "\n\nDetails were written to:\n" + startupLog.getFile(),
+                    "Startup Failed",
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        } catch (Throwable ignored) {
+            // No usable display; the startup log is the record.
+        }
+        System.exit(1);
     }
 
     /**
