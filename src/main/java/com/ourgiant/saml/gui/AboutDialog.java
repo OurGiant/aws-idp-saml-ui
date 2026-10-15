@@ -145,18 +145,35 @@ public class AboutDialog extends JDialog {
         updateLabel.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                try {
-                    URI uri = new URI(releaseUrl);
-                    if (!isTrustedReleaseUrl(uri)) {
-                        logger.warn("Refusing to open untrusted release URL: {}", releaseUrl);
-                        return;
-                    }
-                    Desktop.getDesktop().browse(uri);
-                } catch (Exception ex) {
-                    logger.warn("Could not open release URL in browser", ex);
-                }
+                openTrustedUrl(null, releaseUrl);
             }
         });
+    }
+
+    /**
+     * Opens a github.com release URL in the default browser — the one way this app opens release
+     * links (the update notice, Help → What's New, links inside release notes). Anything that
+     * isn't {@link #isTrustedReleaseUrl trusted} is refused. A failure is reported in a dialog
+     * when {@code parent} is given, else only logged.
+     */
+    static void openTrustedUrl(Component parent, String url) {
+        try {
+            URI uri = new URI(url);
+            if (!isTrustedReleaseUrl(uri)) {
+                logger.warn("Refusing to open untrusted URL: {}", url);
+                return;
+            }
+            if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                throw new UnsupportedOperationException("Opening a browser isn't supported on this platform");
+            }
+            Desktop.getDesktop().browse(uri);
+        } catch (Exception ex) {
+            logger.warn("Could not open {} in browser", url, ex);
+            if (parent != null) {
+                JOptionPane.showMessageDialog(parent, "Couldn't open your browser. You can visit:\n" + url,
+                    "Couldn't Open Browser", JOptionPane.WARNING_MESSAGE);
+            }
+        }
     }
 
     /**

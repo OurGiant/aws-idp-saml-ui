@@ -26,3 +26,17 @@ this repo.
   even one that looks UI-unrelated.
 
 No other repo-specific PR-checklist items beyond the generic workflow.
+
+## Cutting a release (e.g. 1.7.0)
+
+Separate from the per-issue patch bumps above, a deliberate decision:
+
+1. **Write the release's "What's New" notes** (#210) as
+   `src/main/resources/whats-new/<version>.html` (plain HTML: `<h2>Version
+   x.y.z</h2>` first, then `<h3>`/`<ul>` sections, written for users, not
+   commit titles) and add `<version>` to `whats-new/versions.txt`. The app shows
+   them once after an upgrade, and `WhatsNewTest` fails if a listed version's
+   notes are missing or untitled. Base them on `git log v<last-release>..main`.
+2. Bump `pom.xml` to the release version in the same PR, then merge it.
+3. Tag `v<version>` on main and push the tag; `build.yml` builds and
+   publishes the installers for tags.

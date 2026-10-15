@@ -38,6 +38,7 @@ that touches AWS console/CLI access.
 - Tray menu quick actions: Request Credentials / Open Console for each pinned profile (with its current status) and Refresh Expiring/Expired Profiles, without opening the window; results arrive as tray notifications while the window is hidden
 - Remembers the main window's size, position, and maximized state between launches (moved back on-screen if its monitor is gone)
 - Silent background check for new releases, with an in-app prompt when one is available
+- "What's New" dialog after upgrading to a new version (once per version), plus Help → What's New for the full release history on GitHub
 
 **Security**
 - Okta password storage is encrypted at rest with a configurable expiration, never stored in plain text
@@ -101,7 +102,7 @@ provider and your first AWS profile, and writes the result to `~/.aws/samlsts`.
 - **Open Console**: launch the AWS Management Console in your browser using the current profile's credentials
 - **Credential Status table**: shows every known profile with its status, expiration time, and time remaining; filter by profile name and/or status, right-click a row for quick actions (request/show credentials, open console, copy account number, pin, delete)
 - **Configuration**: session duration, password storage, theme, browser, notifications, startup behavior, and a Force Refresh action to immediately clean up stale profiles
-- **View Logs** (File menu): a live, auto-refreshing view of the application log and the startup log, with a button to open the log folder
+- **View Logs** (Help menu): a live, auto-refreshing view of the application log and the startup log, with a button to open the log folder
 
 ### Logs
 
@@ -254,7 +255,9 @@ src/main/java/com/ourgiant/saml/
 │   ├── ProfileEditDialog.java     # Add/edit a single profile
 │   ├── ImportRolesDialog.java     # Import profiles from the roles an IdP login grants
 │   ├── ProfileImportDialog.java   # Preview and import a profile export file
-│   └── LogViewerDialog.java       # In-app viewer for the app and startup logs
+│   ├── LogViewerDialog.java       # In-app viewer for the app and startup logs
+│   ├── WhatsNew.java              # Bundled release notes: which to show after an upgrade
+│   └── WhatsNewDialog.java        # Release notes dialog
 ├── core/                          # Domain logic - no javax.swing.* dependency
 │   ├── SamlAuthenticator.java     # SAML authentication flow orchestration
 │   ├── SamlParser.java            # SAML assertion parsing (XXE-hardened)
@@ -305,4 +308,4 @@ MIT — see [LICENSE](LICENSE) for details.
 - Check browser compatibility for Selenium WebDriver (Chrome, Firefox, or Edge)
 - Verify your `samlsts` configuration and SAML provider settings via the Configuration/Profile Manager dialogs
 - If a profile lingers in the status table after being removed from `samlsts`, use **Configuration → Force Refresh** to prune it immediately
-- Review the logs via **File → View Logs...**, or directly in `~/.aws-idp-saml-ui/logs/` (`app.log` for errors during use, `startup.log` if the app fails to open)
+- Review the logs via **Help → View Logs...**, or directly in `~/.aws-idp-saml-ui/logs/` (`app.log` for errors during use, `startup.log` if the app fails to open)
