@@ -243,6 +243,16 @@ public class DatabaseManager {
         setConfig("last_used_profile", profile);
     }
 
+    // Intentionally not seeded: an absent value means the window hasn't been placed yet, so it
+    // opens at its default (packed, centred) size and position.
+    public String getMainWindowBounds() {
+        return getConfig("main_window_bounds");
+    }
+
+    public void setMainWindowBounds(String bounds) {
+        setConfig("main_window_bounds", bounds);
+    }
+
     public boolean getStartMinimizedToTray() {
         String value = getConfig("start_minimized_to_tray");
         return "true".equalsIgnoreCase(value); // Disabled by default

@@ -109,6 +109,13 @@ public class SwingMain extends JFrame {
     // geckodriver processes, the same failure mode already fixed once for the login flow (#84).
     private final List<WebDriver> openConsoleDrivers = Collections.synchronizedList(new ArrayList<>());
 
+    // Last bounds while the window was in its normal (not maximized/minimized) state. getBounds()
+    // on a maximized window returns the maximized size, which isn't what should be restored when
+    // the user later un-maximizes, so this is tracked separately as the window moves/resizes.
+    private Rectangle lastNormalBounds;
+    // lastNormalBounds as of the moment the window was maximized, reapplied on un-maximize (see trackWindowBounds()).
+    private Rectangle boundsBeforeMaximize;
+
     public SwingMain() {
         configManager = new ConfigManager();
         credentialManager = new CredentialManager();
@@ -346,6 +353,80 @@ public class SwingMain extends JFrame {
         pack();
         setMinimumSize(getSize());
         setLocationRelativeTo(null);
+        restoreWindowBounds();
+        trackWindowBounds();
+    }
+
+    /** Reapplies the size/position saved by {@link #saveWindowBounds()}, if it still fits on a connected screen. */
+    private void restoreWindowBounds() {
+        WindowBounds saved = WindowBounds.parse(databaseManager.getMainWindowBounds());
+        if (saved == null) {
+            return;
+        }
+        Rectangle fitted = saved.fitTo(WindowBounds.currentScreens(), getMinimumSize());
+        if (fitted == null) {
+            logger.info("Saved window position {} is off every connected screen; using the default position", saved.normalBounds());
+        } else {
+            setBounds(fitted);
+        }
+        if (saved.maximized()) {
+            boundsBeforeMaximize = getBounds();
+            setExtendedState(getExtendedState() | JFrame.MAXIMIZED_BOTH);
+        }
+    }
+
+    private void trackWindowBounds() {
+        lastNormalBounds = getBounds();
+        // Window managers' own restore geometry isn't reliable (e.g. on X11 a window first shown
+        // maximized un-maximizes a frame border smaller each time, compounding across launches),
+        // so the remembered normal bounds are reapplied explicitly on un-maximize.
+        addWindowStateListener(e -> {
+            boolean wasMaximized = (e.getOldState() & JFrame.MAXIMIZED_BOTH) == JFrame.MAXIMIZED_BOTH;
+            boolean isMaximized = (e.getNewState() & JFrame.MAXIMIZED_BOTH) == JFrame.MAXIMIZED_BOTH;
+            if (!wasMaximized && isMaximized) {
+                boundsBeforeMaximize = new Rectangle(lastNormalBounds);
+            } else if (wasMaximized && !isMaximized && boundsBeforeMaximize != null) {
+                Rectangle target = boundsBeforeMaximize;
+                lastNormalBounds = new Rectangle(target);
+                SwingUtilities.invokeLater(() -> setBounds(target));
+            }
+        });
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentMoved(java.awt.event.ComponentEvent e) {
+                rememberNormalBounds();
+            }
+
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                rememberNormalBounds();
+            }
+        });
+        // Saves on every close, whether it hides to the tray or exits (no tray: EXIT_ON_CLOSE).
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                saveWindowBounds();
+            }
+        });
+    }
+
+    private void rememberNormalBounds() {
+        if (isShowing() && getExtendedState() == JFrame.NORMAL) {
+            lastNormalBounds = getBounds();
+        }
+    }
+
+    private void saveWindowBounds() {
+        if (lastNormalBounds == null) {
+            return;
+        }
+        boolean maximized = (getExtendedState() & JFrame.MAXIMIZED_BOTH) == JFrame.MAXIMIZED_BOTH;
+        try {
+            databaseManager.setMainWindowBounds(new WindowBounds(lastNormalBounds, maximized).serialize());
+        } catch (Exception e) {
+            logger.warn("Failed to save main window bounds", e);
+        }
     }
 
     private JMenuBar createMenuBar() {
@@ -534,7 +615,8 @@ public class SwingMain extends JFrame {
     private void restoreFromTray() {
         boolean wasVisible = isVisible();
         setVisible(true);
-        setExtendedState(JFrame.NORMAL);
+        // Clear only the minimized bit, so a window restored maximized stays maximized.
+        setExtendedState(getExtendedState() & ~JFrame.ICONIFIED);
         toFront();
         requestFocus();
         if (!wasVisible) {
@@ -544,6 +626,9 @@ public class SwingMain extends JFrame {
     }
 
     private void exitApplication() {
+        if (isShowing()) {
+            saveWindowBounds();
+        }
         if (trayIcon != null) {
             SystemTray.getSystemTray().remove(trayIcon);
         }
@@ -1669,6 +1754,11 @@ public class SwingMain extends JFrame {
      * can click anything.
      */
     private static void syncWindowPositionWithWindowManager(Window window) {
+        // Moving a maximized window can un-maximize it on some window managers, and a maximized
+        // window already sits at the screen origin the popups would be computed from.
+        if (window instanceof Frame frame && (frame.getExtendedState() & Frame.MAXIMIZED_BOTH) != 0) {
+            return;
+        }
         Point location = window.getLocation();
         window.setLocation(location.x + 1, location.y);
         window.setLocation(location.x, location.y);
