@@ -167,6 +167,21 @@ class ConfigManagerTest {
     }
 
     @Test
+    void getDefaultUsername_usesGlobalUsername() throws Exception {
+        writeSamlsts("""
+                [global]
+                username = jdoe@example.com
+
+                [some-profile]
+                username = other@example.com
+                """);
+
+        configManager = new ConfigManager();
+
+        assertEquals("jdoe@example.com", configManager.getDefaultUsername());
+    }
+
+    @Test
     void getAwsRegion_defaultsToUsEast1WhenUnset() throws Exception {
         writeSamlsts("""
                 [global]

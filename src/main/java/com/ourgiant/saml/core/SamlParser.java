@@ -69,12 +69,14 @@ public class SamlParser {
                     String valueText = valueElement.getTextContent();
 
                     if (valueText != null && valueText.contains("arn:aws:iam:") && valueText.contains(":role/")) {
-                        // Split role and principal ARNs
+                        // Split role and principal ARNs. AWS accepts either order and IdPs differ
+                        // (Okta sends role first, ADFS commonly principal first), so pick by content.
                         String[] arns = valueText.split(",");
                         if (arns.length == 2) {
-                            String roleArn = arns[0].trim();
-                            String principalArn = arns[1].trim();
-                            roles.add(new SamlRole(roleArn, principalArn));
+                            String first = arns[0].trim();
+                            String second = arns[1].trim();
+                            boolean roleFirst = first.contains(":role/");
+                            roles.add(new SamlRole(roleFirst ? first : second, roleFirst ? second : first));
                         }
                     }
                 }

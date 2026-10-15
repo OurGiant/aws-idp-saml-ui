@@ -155,6 +155,11 @@ public class ConfigManager {
         return global != null ? global.get("User") : null;
     }
 
+    /** The username for a login that isn't tied to any profile (role discovery): the global setting. */
+    public String getDefaultUsername() {
+        return getUsername(null);
+    }
+
     /**
      * Get session duration for a profile
      */

@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.util.function.Supplier;
 
 /**
  * Dialog for listing, adding, editing, and deleting AWS profiles in ~/.aws/samlsts.
@@ -18,11 +19,18 @@ public class ProfileManagerDialog extends JDialog {
     private final ConfigManager configManager;
     private final DefaultListModel<String> profileListModel = new DefaultListModel<>();
     private final JList<String> profileList = new JList<>(profileListModel);
+    private final Supplier<ImportRolesDialog> importDialogFactory;
     private boolean profilesChanged = false;
 
     public ProfileManagerDialog(Frame parent, ConfigManager configManager) {
+        this(parent, configManager, null);
+    }
+
+    /** @param importDialogFactory creates the "Import from IdP" dialog; null hides that button */
+    public ProfileManagerDialog(Frame parent, ConfigManager configManager, Supplier<ImportRolesDialog> importDialogFactory) {
         super(parent, "Manage Profiles", true);
         this.configManager = configManager;
+        this.importDialogFactory = importDialogFactory;
 
         initializeUI();
         loadProfileList();
@@ -58,11 +66,16 @@ public class ProfileManagerDialog extends JDialog {
         JButton deleteButton = new JButton("Delete");
         deleteButton.setMnemonic(KeyEvent.VK_D);
         deleteButton.setToolTipText("Delete the selected profile");
+        JButton importButton = new JButton("Import from IdP...");
+        importButton.setMnemonic(KeyEvent.VK_I);
+        importButton.setToolTipText("Log in to an identity provider once and create profiles from the AWS roles it grants you");
+        importButton.setVisible(importDialogFactory != null);
         addButton.addActionListener(e -> onAdd());
         editButton.addActionListener(e -> onEdit());
         deleteButton.addActionListener(e -> onDelete());
+        importButton.addActionListener(e -> onImport());
 
-        for (JButton button : new JButton[]{addButton, editButton, deleteButton}) {
+        for (JButton button : new JButton[]{addButton, editButton, deleteButton, importButton}) {
             button.setAlignmentX(Component.LEFT_ALIGNMENT);
             button.setMaximumSize(new Dimension(Integer.MAX_VALUE, button.getPreferredSize().height));
             sideButtonPanel.add(button);
@@ -103,6 +116,23 @@ public class ProfileManagerDialog extends JDialog {
         ProfileEditDialog dialog = new ProfileEditDialog((Frame) getParent(), configManager, null);
         dialog.setVisible(true);
         if (dialog.isSaved()) {
+            profilesChanged = true;
+            loadProfileList();
+        }
+    }
+
+    private void onImport() {
+        if (configManager.getIdpProviders().isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                "No identity providers are configured. Add one to ~/.aws/samlsts before importing profiles.",
+                "No Identity Providers",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        ImportRolesDialog dialog = importDialogFactory.get();
+        dialog.setVisible(true);
+        if (dialog.getImportedCount() > 0) {
             profilesChanged = true;
             loadProfileList();
         }

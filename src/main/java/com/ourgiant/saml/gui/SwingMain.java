@@ -1340,7 +1340,9 @@ public class SwingMain extends JFrame {
     }
 
     private void showProfileManagerDialog() {
-        ProfileManagerDialog dialog = new ProfileManagerDialog(this, configManager);
+        ProfileManagerDialog dialog = new ProfileManagerDialog(this, configManager, () -> new ImportRolesDialog(this, configManager,
+            () -> new SamlAuthenticator(configManager, credentialManager, passwordManager),
+            databaseManager.getFastPassEnabled(), showBrowserCheckBox.isSelected()));
         dialog.setVisible(true);
         if (dialog.isProfilesChanged()) {
             loadProfiles();

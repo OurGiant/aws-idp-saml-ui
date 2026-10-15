@@ -53,6 +53,14 @@ class SamlAuthenticatorTest {
     }
 
     @Test
+    void discoverRoles_rejectsUnknownOrIncompleteProvider() {
+        assertThrows(IllegalArgumentException.class,
+                () -> authenticator().discoverRoles("Fed-Missing", false, false, msg -> { }));
+        assertThrows(IllegalArgumentException.class,
+                () -> authenticator().discoverRoles(null, false, false, msg -> { }));
+    }
+
+    @Test
     void validateSecureLoginUrl_acceptsHttpsUrl() {
         SamlAuthenticator.validateSecureLoginUrl("https://login.example.com/app/sso/saml");
     }
