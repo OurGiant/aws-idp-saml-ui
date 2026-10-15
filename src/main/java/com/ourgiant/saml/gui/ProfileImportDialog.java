@@ -70,6 +70,7 @@ public class ProfileImportDialog extends JDialog {
         table.setFillsViewportHeight(true);
         table.setRowHeight(Math.max(table.getRowHeight(), 22));
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
+        table.setAutoCreateRowSorter(true); // click a header to sort (#218); edits map view rows to model rows
         int[] widths = {60, 170, 110, 150, 120, 170, 190};
         for (int i = 0; i < widths.length; i++) {
             table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);

@@ -111,7 +111,10 @@ public class ImportRolesDialog extends JDialog {
         table.setFillsViewportHeight(true);
         table.setRowHeight(Math.max(table.getRowHeight(), 22));
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
-        int[] widths = {60, 110, 170, 190, 190, 260};
+        // Click a header to sort (#218). The JTable maps view rows to model rows for editing, and
+        // everything else here reads the model, so sorting never changes which role a tick applies to.
+        table.setAutoCreateRowSorter(true);
+        int[] widths = {60, 70, 110, 170, 190, 190, 260};
         for (int i = 0; i < widths.length; i++) {
             table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         }
@@ -279,7 +282,9 @@ public class ImportRolesDialog extends JDialog {
     }
 
     private static final class RolesTableModel extends AbstractTableModel {
-        private static final String[] COLUMNS = {"Import", "Account", "Role", "Profile Name", "GUI Name", "Notes"};
+        // Named so a new column can't silently shift the others (see #206).
+        static final int IMPORT = 0, PRESENT = 1, ACCOUNT = 2, ROLE = 3, PROFILE_NAME = 4, GUI_NAME = 5, NOTES = 6;
+        private static final String[] COLUMNS = {"Import", "Present", "Account", "Role", "Profile Name", "GUI Name", "Notes"};
 
         static final class Row {
             final Candidate candidate;
@@ -348,23 +353,25 @@ public class ImportRolesDialog extends JDialog {
 
         @Override
         public Class<?> getColumnClass(int column) {
-            return column == 0 ? Boolean.class : String.class;
+            return column == IMPORT ? Boolean.class : String.class;
         }
 
         @Override
         public boolean isCellEditable(int rowIndex, int column) {
-            return rows.get(rowIndex).candidate.importable() && (column == 0 || column == 3 || column == 4);
+            return rows.get(rowIndex).candidate.importable()
+                && (column == IMPORT || column == PROFILE_NAME || column == GUI_NAME);
         }
 
         @Override
         public Object getValueAt(int rowIndex, int column) {
             Row row = rows.get(rowIndex);
             return switch (column) {
-                case 0 -> row.selected;
-                case 1 -> row.candidate.role().accountNumber();
-                case 2 -> row.candidate.role().roleName();
-                case 3 -> row.profileName;
-                case 4 -> row.guiName;
+                case IMPORT -> row.selected;
+                case PRESENT -> row.candidate.existingProfile() != null ? "Yes" : "No";
+                case ACCOUNT -> row.candidate.role().accountNumber();
+                case ROLE -> row.candidate.role().roleName();
+                case PROFILE_NAME -> row.profileName;
+                case GUI_NAME -> row.guiName;
                 default -> row.notes;
             };
         }
@@ -376,9 +383,9 @@ public class ImportRolesDialog extends JDialog {
             }
             Row row = rows.get(rowIndex);
             switch (column) {
-                case 0 -> row.selected = Boolean.TRUE.equals(value);
-                case 3 -> row.profileName = value == null ? "" : value.toString();
-                case 4 -> row.guiName = value == null ? "" : value.toString();
+                case IMPORT -> row.selected = Boolean.TRUE.equals(value);
+                case PROFILE_NAME -> row.profileName = value == null ? "" : value.toString();
+                case GUI_NAME -> row.guiName = value == null ? "" : value.toString();
                 default -> {
                     return;
                 }
