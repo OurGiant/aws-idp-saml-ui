@@ -57,6 +57,11 @@ import java.util.stream.Collectors;
  */
 public class SwingMain extends JFrame {
     private static final Logger logger = LoggerFactory.getLogger(SwingMain.class);
+
+    // Status table model columns. Named so that adding a column (as #185 did) can't silently
+    // leave code reading the wrong one (#206).
+    private static final int PROFILE_COLUMN = 0;
+    private static final int STATUS_COLUMN = 2;
     private static final Duration EXPIRY_WARNING_THRESHOLD = Duration.ofMinutes(5);
     // How long to wait before retrying an auto-renew attempt for the same pinned profile after
     // one fails (e.g. it needs an interactive MFA step auto-renew can't complete headlessly) --
@@ -778,7 +783,7 @@ public class SwingMain extends JFrame {
         filters.add(new RowFilter<>() {
             @Override
             public boolean include(Entry<?, ?> entry) {
-                return allowedStatuses.contains(entry.getStringValue(2));
+                return allowedStatuses.contains(entry.getStringValue(STATUS_COLUMN));
             }
         });
         RowFilter<Object, Object> statusAndTextFilter = RowFilter.andFilter(filters);
@@ -996,8 +1001,8 @@ public class SwingMain extends JFrame {
     private void refreshExpiringOrExpiredProfiles() {
         List<String> targets = new ArrayList<>();
         for (int row = 0; row < tokenStatusTableModel.getRowCount(); row++) {
-            String profile = (String) tokenStatusTableModel.getValueAt(row, 0);
-            String status = (String) tokenStatusTableModel.getValueAt(row, 1);
+            String profile = (String) tokenStatusTableModel.getValueAt(row, PROFILE_COLUMN);
+            String status = (String) tokenStatusTableModel.getValueAt(row, STATUS_COLUMN);
             if ("EXPIRED".equals(status) || expiringSoonProfiles.contains(profile)) {
                 targets.add(profile);
             }
@@ -1022,8 +1027,8 @@ public class SwingMain extends JFrame {
 
         Set<String> pinnedDueProfiles = new HashSet<>();
         for (int row = 0; row < tokenStatusTableModel.getRowCount(); row++) {
-            String profile = (String) tokenStatusTableModel.getValueAt(row, 0);
-            String status = (String) tokenStatusTableModel.getValueAt(row, 1);
+            String profile = (String) tokenStatusTableModel.getValueAt(row, PROFILE_COLUMN);
+            String status = (String) tokenStatusTableModel.getValueAt(row, STATUS_COLUMN);
             if (pinnedProfileOrder.contains(profile) && ("EXPIRED".equals(status) || expiringSoonProfiles.contains(profile))) {
                 pinnedDueProfiles.add(profile);
             }
