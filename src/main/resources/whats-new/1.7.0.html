@@ -1,0 +1,33 @@
+<h2>Version 1.7.0</h2>
+
+<h3>Set up profiles faster</h3>
+<ul>
+  <li><b>Import from your identity provider.</b> In <i>Manage Profiles &rarr; Import from IdP...</i>, log in once and every AWS role you're granted is listed. Tick the ones you want; no more looking up account numbers and role names.</li>
+  <li><b>Export and import profiles.</b> <i>File &rarr; Export Profiles...</i> saves your profiles and settings to a file you can import on a new machine or share with your team. The file never contains credentials or passwords, and importing never overwrites your existing profiles without asking.</li>
+  <li><b>Clearer "role not found" errors.</b> If a profile's role isn't available to you, the error now lists the roles you <i>do</i> have, with the likely match highlighted.</li>
+</ul>
+
+<h3>Work from the tray</h3>
+<ul>
+  <li><b>Tray quick actions.</b> Pinned profiles now appear in the tray menu, with their status, plus Request Credentials and Open Console, and you can refresh expiring profiles without opening the window.</li>
+  <li><b>Remembers your window.</b> The main window reopens where you left it, at the same size, maximized if it was.</li>
+</ul>
+
+<h3>Use your credentials anywhere</h3>
+<ul>
+  <li><b>Ready-to-paste shell commands.</b> <i>Show Credentials</i> can format credentials for bash/zsh, PowerShell or Command Prompt. Copy to Clipboard now copies only the commands.</li>
+  <li><b>AWS CLI region set up for you.</b> When a profile has no region in <code>~/.aws/config</code>, one is added so <code>aws --profile &lt;name&gt;</code> works right away. Nothing else in that file is changed, and you can turn this off in <i>Configuration</i>.</li>
+  <li><b>Copy Account Number</b> from the status table's right-click menu.</li>
+</ul>
+
+<h3>Troubleshooting</h3>
+<ul>
+  <li><b>View Logs</b> (<i>Help &rarr; View Logs...</i>) shows the app's log and a startup log. If the app ever fails to start, it now tells you where the details were written.</li>
+  <li>The new <b>Help</b> menu also has these release notes and a link to every past release.</li>
+</ul>
+
+<h3>Fixes</h3>
+<ul>
+  <li><i>Refresh Expiring/Expired Profiles</i> and <i>auto-renew pinned profiles</i> now also renew profiles that have already <b>expired</b>. Previously only ones about to expire were picked up.</li>
+  <li>Roles from identity providers that list the provider before the role (such as ADFS) are now read correctly.</li>
+</ul>

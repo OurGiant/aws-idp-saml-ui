@@ -272,6 +272,16 @@ public class DatabaseManager {
         setConfig("credential_export_format", format);
     }
 
+    // Not seeded: absent means this install predates the What's New dialog (#210), so an upgrade
+    // shows every bundled release's notes up to the running version. First-run setup sets it.
+    public String getLastSeenWhatsNewVersion() {
+        return getConfig("last_seen_whats_new_version");
+    }
+
+    public void setLastSeenWhatsNewVersion(String version) {
+        setConfig("last_seen_whats_new_version", version);
+    }
+
     public boolean getStartMinimizedToTray() {
         String value = getConfig("start_minimized_to_tray");
         return "true".equalsIgnoreCase(value); // Disabled by default

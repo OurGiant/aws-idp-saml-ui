@@ -124,6 +124,11 @@ public class SwingMain extends JFrame {
     // on a maximized window returns the maximized size, which isn't what should be restored when
     // the user later un-maximizes, so this is tracked separately as the window moves/resizes.
     private Rectangle lastNormalBounds;
+
+    // Startup dialog coordination (see onStartupComplete()).
+    private boolean startupDialogsDone;
+    private boolean startupDialogsDeferredUntilShown;
+    private String[] deferredUpdateRelease;
     // lastNormalBounds as of the moment the window was maximized, reapplied on un-maximize (see trackWindowBounds()).
     private Rectangle boundsBeforeMaximize;
 
@@ -473,18 +478,6 @@ public class SwingMain extends JFrame {
 
         fileMenu.addSeparator();
 
-        JMenuItem viewLogsMenuItem = new JMenuItem("View Logs...");
-        viewLogsMenuItem.setMnemonic(KeyEvent.VK_L);
-        viewLogsMenuItem.addActionListener(e -> new LogViewerDialog(this).setVisible(true));
-        fileMenu.add(viewLogsMenuItem);
-
-        JMenuItem aboutMenuItem = new JMenuItem("About...");
-        aboutMenuItem.setMnemonic(KeyEvent.VK_A);
-        aboutMenuItem.addActionListener(e -> showAboutDialog());
-        fileMenu.add(aboutMenuItem);
-
-        fileMenu.addSeparator();
-
         JMenuItem exitMenuItem = new JMenuItem("Exit");
         exitMenuItem.setMnemonic(KeyEvent.VK_X);
         exitMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Q, InputEvent.CTRL_DOWN_MASK));
@@ -512,6 +505,38 @@ public class SwingMain extends JFrame {
         actionsMenu.add(refreshSelectedMenuItem);
 
         menuBar.add(actionsMenu);
+
+        JMenu helpMenu = new JMenu("Help");
+        helpMenu.setMnemonic(KeyEvent.VK_H);
+
+        JMenuItem whatsNewMenuItem = new JMenuItem("What's New");
+        whatsNewMenuItem.setMnemonic(KeyEvent.VK_W);
+        whatsNewMenuItem.setToolTipText("Open the release history on GitHub: " + WhatsNew.RELEASES_URL);
+        whatsNewMenuItem.addActionListener(e -> AboutDialog.openTrustedUrl(this, WhatsNew.RELEASES_URL));
+        helpMenu.add(whatsNewMenuItem);
+
+        String notesVersion = WhatsNew.latestNotesFor(WhatsNew.bundledVersions(), AboutDialog.resolveCurrentVersion());
+        JMenuItem releaseNotesMenuItem = new JMenuItem("Release Notes for This Version...");
+        releaseNotesMenuItem.setMnemonic(KeyEvent.VK_N);
+        releaseNotesMenuItem.setEnabled(notesVersion != null);
+        releaseNotesMenuItem.setToolTipText(notesVersion != null
+            ? "What changed in version " + notesVersion : "No release notes are bundled with this build");
+        releaseNotesMenuItem.addActionListener(e -> showReleaseNotes(notesVersion));
+        helpMenu.add(releaseNotesMenuItem);
+
+        helpMenu.addSeparator();
+
+        JMenuItem viewLogsMenuItem = new JMenuItem("View Logs...");
+        viewLogsMenuItem.setMnemonic(KeyEvent.VK_L);
+        viewLogsMenuItem.addActionListener(e -> new LogViewerDialog(this).setVisible(true));
+        helpMenu.add(viewLogsMenuItem);
+
+        JMenuItem aboutMenuItem = new JMenuItem("About...");
+        aboutMenuItem.setMnemonic(KeyEvent.VK_A);
+        aboutMenuItem.addActionListener(e -> showAboutDialog());
+        helpMenu.add(aboutMenuItem);
+
+        menuBar.add(helpMenu);
 
         return menuBar;
     }
@@ -619,6 +644,71 @@ public class SwingMain extends JFrame {
         new AboutDialog(this).setVisible(true);
     }
 
+    private void showReleaseNotes(String version) {
+        String html = version != null ? WhatsNew.notesHtml(List.of(version)) : null;
+        if (html == null) {
+            JOptionPane.showMessageDialog(this, "No release notes are bundled with this build.",
+                "Release Notes", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        new WhatsNewDialog(this, "Release Notes — AWS IdP SAML UI " + version, html).setVisible(true);
+    }
+
+    /**
+     * Called once by main() when startup has finished. Startup dialogs (What's New after an
+     * upgrade, #210, then a newer-release notice from the silent update check) wait for the
+     * window's first appearance — immediately, or the first time it's opened from the tray — and
+     * are shown one at a time rather than stacked or popping up while the window is hidden.
+     */
+    void onStartupComplete(boolean firstRun, boolean windowShown) {
+        if (firstRun) {
+            // A brand-new install has nothing to compare against; its first What's New is the next upgrade.
+            databaseManager.setLastSeenWhatsNewVersion(AboutDialog.resolveCurrentVersion());
+        }
+        if (windowShown) {
+            SwingUtilities.invokeLater(this::showStartupDialogs);
+        } else {
+            startupDialogsDeferredUntilShown = true;
+        }
+    }
+
+    private void showStartupDialogs() {
+        try {
+            maybeShowWhatsNew();
+        } catch (Exception e) {
+            logger.warn("Could not show What's New", e);
+        } finally {
+            startupDialogsDone = true;
+            if (deferredUpdateRelease != null) {
+                String[] release = deferredUpdateRelease;
+                deferredUpdateRelease = null;
+                showUpdateNotice(release);
+            }
+        }
+    }
+
+    private void maybeShowWhatsNew() {
+        String current = AboutDialog.resolveCurrentVersion();
+        List<String> versions = WhatsNew.versionsToShow(WhatsNew.bundledVersions(),
+            databaseManager.getLastSeenWhatsNewVersion(), current);
+        if (versions.isEmpty()) {
+            return;
+        }
+        // Recorded before showing, so it appears once per version even if the app is closed while it's open.
+        databaseManager.setLastSeenWhatsNewVersion(current);
+        String html = WhatsNew.notesHtml(versions);
+        if (html == null) {
+            return;
+        }
+        logger.info("Showing What's New for version(s) {}", versions);
+        new WhatsNewDialog(this, "What's New in AWS IdP SAML UI " + versions.get(0), html).setVisible(true);
+    }
+
+    private void showUpdateNotice(String[] release) {
+        databaseManager.setLastNotifiedUpdateVersion(release[0]);
+        new AboutDialog(SwingMain.this, release).setVisible(true);
+    }
+
     /**
      * Silently checks for a newer release in the background. Does nothing if up to date or if the
      * check fails (offline, rate-limited, etc.) — failures are only logged at debug level, matching
@@ -650,8 +740,12 @@ public class SwingMain extends JFrame {
                     if (latestVersion.equals(databaseManager.getLastNotifiedUpdateVersion())) {
                         return;
                     }
-                    databaseManager.setLastNotifiedUpdateVersion(latestVersion);
-                    new AboutDialog(SwingMain.this, new String[]{latestVersion, releaseUrl}).setVisible(true);
+                    String[] newerRelease = {latestVersion, releaseUrl};
+                    if (startupDialogsDone) {
+                        showUpdateNotice(newerRelease);
+                    } else {
+                        deferredUpdateRelease = newerRelease; // shown after What's New, see showStartupDialogs()
+                    }
                 } catch (Exception e) {
                     logger.debug("Silent update check failed", e);
                 }
@@ -815,6 +909,10 @@ public class SwingMain extends JFrame {
         if (!wasVisible) {
             // First real show when launched minimized skips main()'s post-show fix; apply it here.
             syncWindowPositionWithWindowManager(this);
+        }
+        if (startupDialogsDeferredUntilShown) {
+            startupDialogsDeferredUntilShown = false;
+            SwingUtilities.invokeLater(this::showStartupDialogs);
         }
     }
 
@@ -1910,7 +2008,8 @@ public class SwingMain extends JFrame {
                 }
 
                 try {
-                    if (!ConfigManager.configFileExists()) {
+                    boolean firstRun = !ConfigManager.configFileExists();
+                    if (firstRun) {
                         DatabaseManager.deleteIfExists();
                         FirstRunSetupDialog setup = new FirstRunSetupDialog();
                         setup.setVisible(true);
@@ -1926,6 +2025,7 @@ public class SwingMain extends JFrame {
                         mainWindow.setVisible(true);
                         syncWindowPositionWithWindowManager(mainWindow);
                     }
+                    mainWindow.onStartupComplete(firstRun, !startMinimized);
                     startupLog.succeeded();
                     logger.info("Startup completed");
                 } catch (Throwable t) {
