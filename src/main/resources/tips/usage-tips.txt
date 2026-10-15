@@ -12,7 +12,7 @@ Work from the tray
 With the window closed, the tray icon's menu has each pinned profile with its status, plus <b>Request Credentials</b>, <b>Open Console</b> and <b>Refresh Expiring/Expired Profiles</b>. Results arrive as notifications.
 ---
 Right-click for quick actions
-Right-click any row in the status table to request or show credentials, open the AWS Console, <b>copy the account number</b>, pin the profile, or delete it.
+Right-click any row in the status table to request or show credentials, open the AWS Console, <b>check identity</b> (ask AWS which role the credentials really are), copy the account number, pin the profile, or delete it.
 ---
 Paste credentials straight into a terminal
 <b>Show Credentials</b> has a <i>Format</i> menu for bash/zsh, PowerShell, Command Prompt and plain <code>.env</code> lines. <b>Copy to Clipboard</b> copies just the commands, ready to paste.

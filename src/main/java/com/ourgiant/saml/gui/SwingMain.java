@@ -8,6 +8,7 @@ import com.ourgiant.saml.core.ConfigManager;
 import com.ourgiant.saml.core.CredentialManager;
 import com.ourgiant.saml.core.CredentialRequestError;
 import com.ourgiant.saml.core.DatabaseManager;
+import com.ourgiant.saml.core.IdentityChecker;
 import com.ourgiant.saml.core.PasswordManager;
 import com.ourgiant.saml.core.ProfileBundle;
 import com.ourgiant.saml.core.ProfileBundleImporter;
@@ -1889,6 +1890,11 @@ public class SwingMain extends JFrame {
         openConsoleItem.addActionListener(e -> openAwsConsoleForProfile(contextMenuTargetProfile));
         menu.add(openConsoleItem);
 
+        JMenuItem checkIdentityItem = new JMenuItem("Check Identity");
+        checkIdentityItem.setToolTipText("Ask AWS who these credentials belong to, and whether they still work");
+        checkIdentityItem.addActionListener(e -> checkIdentityForProfile(contextMenuTargetProfile));
+        menu.add(checkIdentityItem);
+
         JMenuItem copyAccountItem = new JMenuItem("Copy Account Number");
         copyAccountItem.addActionListener(e -> copyAccountNumberForProfile(contextMenuTargetProfile));
         menu.add(copyAccountItem);
@@ -1917,6 +1923,7 @@ public class SwingMain extends JFrame {
                 showItem.setEnabled(hasCredentials);
                 showEncryptedItem.setEnabled(hasCredentials && hasPublicKey);
                 openConsoleItem.setEnabled(hasCredentials);
+                checkIdentityItem.setEnabled(hasCredentials);
                 copyAccountItem.setEnabled(profile != null && hasAccountNumber(profile));
                 pinItem.setText(profile != null && databaseManager.isProfilePinned(profile)
                     ? "Unpin Profile" : "Pin Profile");
@@ -1934,6 +1941,107 @@ public class SwingMain extends JFrame {
         });
 
         return menu;
+    }
+
+    /**
+     * Check Identity (#223): asks STS who the profile's saved credentials belong to. Shows the
+     * account, role and ARN, warns if that's not the account the profile is configured for, and
+     * offers Request Credentials when the fix is new credentials.
+     */
+    private void checkIdentityForProfile(String profileName) {
+        if (profileName == null) {
+            return;
+        }
+        CredentialManager.AwsCredentials credentials = credentialManager.getCredentials(profileName);
+        if (credentials == null) {
+            JOptionPane.showMessageDialog(this, "No credentials found for profile: " + profileName,
+                "No Credentials", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        String region = configManager.getAwsRegion(profileName);
+        statusLabel.setText("Checking identity for \"" + profileName + "\"...");
+        new SwingWorker<IdentityChecker.Identity, Void>() {
+            @Override
+            protected IdentityChecker.Identity doInBackground() throws Exception {
+                return IdentityChecker.check(credentials, region);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    showIdentity(profileName, get());
+                } catch (java.util.concurrent.ExecutionException ex) {
+                    Throwable cause = ex.getCause();
+                    if (cause instanceof IdentityChecker.CheckFailedException failed) {
+                        showIdentityProblem(profileName, failed);
+                    } else {
+                        logger.error("Check Identity failed for {}", profileName, cause);
+                        statusLabel.setText("Check Identity failed: " + cause.getMessage());
+                    }
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }.execute();
+    }
+
+    private void showIdentity(String profileName, IdentityChecker.Identity identity) {
+        logger.info("Check Identity for {}: {}", profileName, identity.arn());
+        statusLabel.setText("\"" + profileName + "\" is " + identity.arn());
+        String configured = configManager.getAccountNumber(profileName);
+        boolean otherAccount = configured != null && !configured.isBlank() && !configured.trim().equals(identity.account());
+        StringBuilder html = new StringBuilder("<html><body style='width: 380px'>")
+            .append("<p>The saved credentials for <b>").append(escapeHtml(profileName)).append("</b> work.</p><table>")
+            .append(identityRow("Account", identity.account()));
+        if (identity.roleName() != null) {
+            html.append(identityRow("Role", identity.roleName()));
+        }
+        html.append(identityRow("ARN", identity.arn())).append(identityRow("User ID", identity.userId())).append("</table>");
+        if (otherAccount) {
+            html.append("<p style='color: #b85c00'><b>Note:</b> this profile is configured for account ")
+                .append(escapeHtml(configured.trim())).append(", but these credentials are for account ")
+                .append(escapeHtml(identity.account())).append(". Another tool may have overwritten them; request ")
+                .append("new credentials to fix it.</p>");
+        }
+        html.append("</body></html>");
+        Object[] options = otherAccount ? new Object[]{"Request Credentials", "Copy ARN", "Close"} : new Object[]{"Copy ARN", "Close"};
+        int choice = JOptionPane.showOptionDialog(this, html.toString(), "Identity — " + profileName,
+            JOptionPane.DEFAULT_OPTION, otherAccount ? JOptionPane.WARNING_MESSAGE : JOptionPane.INFORMATION_MESSAGE,
+            null, options, options[options.length - 1]);
+        Object picked = choice >= 0 ? options[choice] : null;
+        if ("Copy ARN".equals(picked)) {
+            StringSelection selection = new StringSelection(identity.arn());
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+            statusLabel.setText("Copied the ARN for \"" + profileName + "\" to the clipboard.");
+        } else if ("Request Credentials".equals(picked)) {
+            requestCredentialsForProfile(profileName);
+        }
+    }
+
+    private void showIdentityProblem(String profileName, IdentityChecker.CheckFailedException failed) {
+        logger.warn("Check Identity for {} failed: {}", profileName, failed.getMessage());
+        statusLabel.setText("Check Identity for \"" + profileName + "\": " + failed.problem().message());
+        String html = "<html><body style='width: 360px'><p>" + escapeHtml(failed.problem().message()) + "</p>"
+            + "<p style='color: gray; font-size: 90%'>" + escapeHtml(failed.getCause() != null && failed.getCause().getMessage() != null
+                ? failed.getCause().getMessage() : "") + "</p></body></html>";
+        if (failed.problem().fixedByNewCredentials()) {
+            Object[] options = {"Request Credentials", "Close"};
+            int choice = JOptionPane.showOptionDialog(this, html, "Identity — " + profileName, JOptionPane.DEFAULT_OPTION,
+                JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+            if (choice == 0) {
+                requestCredentialsForProfile(profileName);
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, html, "Identity — " + profileName, JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    private static String identityRow(String label, String value) {
+        return "<tr><td style='color: gray; padding-right: 8px'>" + label + "</td><td>" + escapeHtml(value == null ? "" : value) + "</td></tr>";
+    }
+
+    private static String escapeHtml(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private boolean hasAccountNumber(String profileName) {
