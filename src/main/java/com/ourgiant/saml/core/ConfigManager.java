@@ -161,42 +161,61 @@ public class ConfigManager {
     }
 
     /**
-     * Get session duration for a profile
+     * Session duration for a credential request, in seconds: the profile's own
+     * {@code sessionduration} if it sets one (#219), otherwise the global default.
      */
     public int getSessionDuration(String profileName) {
-        // 1. UI database value takes highest priority
+        Integer own = getProfileSessionDuration(profileName);
+        return own != null ? own : getDefaultSessionDuration();
+    }
+
+    /** The profile's own session duration override in seconds, or null when it uses the global default. */
+    public Integer getProfileSessionDuration(String profileName) {
+        Profile.Section profile = profileName != null ? getProfile(profileName) : null;
+        String duration = profile != null ? profile.get("sessionduration") : null;
+        if (duration == null || duration.isBlank()) {
+            return null;
+        }
+        try {
+            int seconds = Integer.parseInt(duration.trim());
+            return seconds > 0 ? seconds : null;
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid session duration for profile {}: {}; using the default", profileName, duration);
+            return null;
+        }
+    }
+
+    /**
+     * The global default session duration in seconds: the Configuration dialog's value, else a
+     * legacy {@code [global] sessionduration}, else 4 hours. (The database value is seeded at
+     * install, so in practice it's the Configuration setting.)
+     */
+    public int getDefaultSessionDuration() {
         int dbDuration = databaseManager.getSessionDuration();
         if (dbDuration > 0) {
             return dbDuration;
         }
-
-        // 2. Global samlsts config
         Profile.Section global = getGlobalConfig();
         if (global != null) {
             String duration = global.get("sessionduration");
             if (duration != null) {
                 try {
-                    return Integer.parseInt(duration);
+                    return Integer.parseInt(duration.trim());
                 } catch (NumberFormatException e) {
                     logger.warn("Invalid global session duration: {}", duration);
                 }
             }
         }
-
-        // 3. Profile-specific samlsts config
-        Profile.Section profile = getProfile(profileName);
-        if (profile != null) {
-            String duration = profile.get("sessionduration");
-            if (duration != null) {
-                try {
-                    return Integer.parseInt(duration);
-                } catch (NumberFormatException e) {
-                    logger.warn("Invalid session duration for profile {}: {}", profileName, duration);
-                }
-            }
-        }
-
         return 14400;
+    }
+
+    /** Smallest and largest session durations offered in the UI, in seconds. */
+    public int getMinSessionDuration() {
+        return databaseManager.getMinDuration();
+    }
+
+    public int getMaxSessionDuration() {
+        return databaseManager.getMaxDuration();
     }
 
     /**
@@ -250,12 +269,20 @@ public class ConfigManager {
      * Creates or updates a profile section with the given fields and persists to disk.
      */
     public void saveProfile(String profileName, Map<String, String> fields) throws Exception {
+        saveProfile(profileName, fields, Set.of());
+    }
+
+    /** As {@link #saveProfile(String, Map)}, also removing {@code removeKeys} from the section (e.g. a cleared override). */
+    public void saveProfile(String profileName, Map<String, String> fields, Set<String> removeKeys) throws Exception {
         Profile.Section section = config.get(profileName);
         if (section == null) {
             section = config.add(profileName);
         }
         for (Map.Entry<String, String> entry : fields.entrySet()) {
             section.put(entry.getKey(), entry.getValue());
+        }
+        for (String key : removeKeys) {
+            section.remove(key);
         }
         persistConfig();
     }

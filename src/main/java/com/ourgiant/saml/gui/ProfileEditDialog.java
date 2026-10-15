@@ -11,6 +11,7 @@ import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Dialog for adding or editing a single AWS profile in ~/.aws/samlsts.
@@ -26,6 +27,8 @@ public class ProfileEditDialog extends JDialog {
     private JComboBox<String> samlProviderCombo;
     private JTextField accountNumberField;
     private JTextField iamRoleField;
+    private JCheckBox useDefaultDurationCheckBox;
+    private JSpinner durationSpinner;
 
     private boolean saved = false;
 
@@ -95,6 +98,11 @@ public class ProfileEditDialog extends JDialog {
         iamRoleField.setToolTipText("The IAM role name (not the full ARN) to assume via the SAML response");
         panel.add(iamRoleField, gbc);
 
+        gbc.gridx = 0; gbc.gridy = 5; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+        panel.add(new JLabel("Session Duration:"), gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        panel.add(buildDurationRow(), gbc);
+
         add(panel, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -109,6 +117,34 @@ public class ProfileEditDialog extends JDialog {
         add(buttonPanel, BorderLayout.SOUTH);
     }
 
+    /**
+     * Per-profile session duration (#219): "Use global default" (no override saved) or a value in
+     * minutes, bounded like the global setting in Configuration.
+     */
+    private JComponent buildDurationRow() {
+        int minMinutes = configManager.getMinSessionDuration() / 60;
+        int maxMinutes = configManager.getMaxSessionDuration() / 60;
+        int defaultMinutes = configManager.getDefaultSessionDuration() / 60;
+        durationSpinner = new JSpinner(new SpinnerNumberModel(clamp(defaultMinutes, minMinutes, maxMinutes), minMinutes, maxMinutes, 15));
+        durationSpinner.setToolTipText("How long this profile's credentials stay valid, in minutes. AWS caps it at the "
+            + "role's maximum session duration in IAM.");
+        useDefaultDurationCheckBox = new JCheckBox("Use global default (" + defaultMinutes + " min)", true);
+        useDefaultDurationCheckBox.setMnemonic(KeyEvent.VK_U);
+        useDefaultDurationCheckBox.setToolTipText("Follow the default in File → Configuration → Session, including later changes to it");
+        useDefaultDurationCheckBox.addActionListener(e -> durationSpinner.setEnabled(!useDefaultDurationCheckBox.isSelected()));
+        durationSpinner.setEnabled(false);
+
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        row.add(useDefaultDurationCheckBox);
+        row.add(durationSpinner);
+        row.add(new JLabel("minutes"));
+        return row;
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
     private void loadExistingProfile(String profileName) {
         profileNameField.setText(profileName);
 
@@ -120,6 +156,15 @@ public class ProfileEditDialog extends JDialog {
         accountNumberField.setText(section.get("accountnumber", ""));
         iamRoleField.setText(section.get("iamrole", ""));
         samlProviderCombo.setSelectedItem(section.get("samlprovider", ""));
+
+        Integer own = configManager.getProfileSessionDuration(profileName);
+        if (own != null) {
+            SpinnerNumberModel model = (SpinnerNumberModel) durationSpinner.getModel();
+            // An out-of-range legacy value (e.g. hand-edited) is shown clamped; saving stores the clamped value.
+            durationSpinner.setValue(clamp(own / 60, (Integer) model.getMinimum(), (Integer) model.getMaximum()));
+            useDefaultDurationCheckBox.setSelected(false);
+            durationSpinner.setEnabled(true);
+        }
     }
 
     private void onSave() {
@@ -152,12 +197,18 @@ public class ProfileEditDialog extends JDialog {
         fields.put("accountnumber", accountNumber);
         fields.put("iamrole", iamRole);
         fields.put("samlprovider", samlProvider);
+        Set<String> removeKeys = Set.of();
+        if (useDefaultDurationCheckBox.isSelected()) {
+            removeKeys = Set.of("sessionduration");
+        } else {
+            fields.put("sessionduration", String.valueOf((Integer) durationSpinner.getValue() * 60));
+        }
 
         try {
             if (isRename) {
                 configManager.deleteProfile(originalProfileName);
             }
-            configManager.saveProfile(profileName, fields);
+            configManager.saveProfile(profileName, fields, removeKeys);
             saved = true;
             setVisible(false);
         } catch (Exception ex) {
