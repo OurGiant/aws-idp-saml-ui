@@ -39,6 +39,7 @@ that touches AWS console/CLI access.
 - Remembers the main window's size, position, and maximized state between launches (moved back on-screen if its monitor is gone)
 - Silent background check for new releases, with an in-app prompt when one is available
 - "What's New" dialog after upgrading to a new version (once per version), plus Help → What's New for the full release history on GitHub
+- Usage tips on startup, one feature at a time, with "Don't show tips on startup"; always available from Help → Usage Tips
 
 **Security**
 - Okta password storage is encrypted at rest with a configurable expiration, never stored in plain text
@@ -257,7 +258,9 @@ src/main/java/com/ourgiant/saml/
 │   ├── ProfileImportDialog.java   # Preview and import a profile export file
 │   ├── LogViewerDialog.java       # In-app viewer for the app and startup logs
 │   ├── WhatsNew.java              # Bundled release notes: which to show after an upgrade
-│   └── WhatsNewDialog.java        # Release notes dialog
+│   ├── WhatsNewDialog.java        # Release notes dialog
+│   ├── UsageTips.java             # Bundled usage tips (tips/usage-tips.txt)
+│   └── UsageTipsDialog.java       # Startup / Help usage tips dialog
 ├── core/                          # Domain logic - no javax.swing.* dependency
 │   ├── SamlAuthenticator.java     # SAML authentication flow orchestration
 │   ├── SamlParser.java            # SAML assertion parsing (XXE-hardened)

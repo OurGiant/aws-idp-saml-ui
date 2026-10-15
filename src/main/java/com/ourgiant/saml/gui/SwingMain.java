@@ -524,6 +524,12 @@ public class SwingMain extends JFrame {
         releaseNotesMenuItem.addActionListener(e -> showReleaseNotes(notesVersion));
         helpMenu.add(releaseNotesMenuItem);
 
+        JMenuItem usageTipsMenuItem = new JMenuItem("Usage Tips...");
+        usageTipsMenuItem.setMnemonic(KeyEvent.VK_U);
+        usageTipsMenuItem.setToolTipText("Tips for features that are easy to miss");
+        usageTipsMenuItem.addActionListener(e -> showUsageTips());
+        helpMenu.add(usageTipsMenuItem);
+
         helpMenu.addSeparator();
 
         JMenuItem viewLogsMenuItem = new JMenuItem("View Logs...");
@@ -674,9 +680,12 @@ public class SwingMain extends JFrame {
 
     private void showStartupDialogs() {
         try {
-            maybeShowWhatsNew();
+            // At most one of these: release notes after an upgrade take the slot, otherwise tips (#211).
+            if (!maybeShowWhatsNew() && databaseManager.getShowStartupTips()) {
+                showUsageTips();
+            }
         } catch (Exception e) {
-            logger.warn("Could not show What's New", e);
+            logger.warn("Could not show startup dialogs", e);
         } finally {
             startupDialogsDone = true;
             if (deferredUpdateRelease != null) {
@@ -687,21 +696,36 @@ public class SwingMain extends JFrame {
         }
     }
 
-    private void maybeShowWhatsNew() {
+    /** @return true if the What's New dialog was shown */
+    private boolean maybeShowWhatsNew() {
         String current = AboutDialog.resolveCurrentVersion();
         List<String> versions = WhatsNew.versionsToShow(WhatsNew.bundledVersions(),
             databaseManager.getLastSeenWhatsNewVersion(), current);
         if (versions.isEmpty()) {
-            return;
+            return false;
         }
         // Recorded before showing, so it appears once per version even if the app is closed while it's open.
         databaseManager.setLastSeenWhatsNewVersion(current);
         String html = WhatsNew.notesHtml(versions);
         if (html == null) {
-            return;
+            return false;
         }
         logger.info("Showing What's New for version(s) {}", versions);
         new WhatsNewDialog(this, "What's New in AWS IdP SAML UI " + versions.get(0), html).setVisible(true);
+        return true;
+    }
+
+    /** Startup tips (#211) and Help → Usage Tips; persists "don't show again" and where to start next time. */
+    private void showUsageTips() {
+        List<UsageTips.Tip> tips = UsageTips.load();
+        if (tips.isEmpty()) {
+            return;
+        }
+        UsageTipsDialog dialog = new UsageTipsDialog(this, tips, databaseManager.getUsageTipsNextIndex(),
+            databaseManager.getShowStartupTips());
+        dialog.setVisible(true);
+        databaseManager.setShowStartupTips(dialog.isShowOnStartup());
+        databaseManager.setUsageTipsNextIndex(dialog.getNextIndex());
     }
 
     private void showUpdateNotice(String[] release) {
