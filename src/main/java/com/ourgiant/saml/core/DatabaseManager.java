@@ -303,6 +303,15 @@ public class DatabaseManager {
         setConfig("expiry_warning_minutes", String.valueOf(minutes));
     }
 
+    /** Whether the status table shows the optional GUI Name column (#227); off by default. */
+    public boolean getShowGuiNameColumn() {
+        return "true".equalsIgnoreCase(getConfig("status_table_show_gui_name"));
+    }
+
+    public void setShowGuiNameColumn(boolean show) {
+        setConfig("status_table_show_gui_name", String.valueOf(show));
+    }
+
     public boolean getShowStartupTips() {
         return !"false".equalsIgnoreCase(getConfig("show_startup_tips")); // On by default: new users benefit most (#211)
     }

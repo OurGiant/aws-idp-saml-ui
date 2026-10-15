@@ -27,7 +27,7 @@ that touches AWS console/CLI access.
 
 **Credential & token management**
 - Live credential status table with per-profile expiration and time remaining
-- Filter the table by name and by status (Valid / Expired / Unknown), independently or combined
+- Filter the table by profile or GUI name and by status (Valid / Expired / Unknown), independently or combined; right-click a column header to show an optional GUI Name column
 - Background auto-refresh (every 30s) plus a manual Refresh Status button
 - System tray notifications before a profile's credentials expire, with a configurable warning time (5, 10, 15 or 30 minutes) that also drives the amber "expiring soon" status, auto-renew and Refresh Expiring/Expired
 - Encrypted, hybrid AES/RSA credential export for handing session credentials to other tooling (e.g. automated deployment scripts) without exposing them in plain text

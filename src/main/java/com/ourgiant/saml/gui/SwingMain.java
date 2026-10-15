@@ -64,6 +64,9 @@ public class SwingMain extends JFrame {
     // leave code reading the wrong one (#206).
     private static final int PROFILE_COLUMN = 0;
     private static final int STATUS_COLUMN = 2;
+    // Appended last in the model so no existing index moves; shown (next to Profile) or hidden in the
+    // view on request (#227).
+    private static final int GUI_NAME_COLUMN = 5;
     // "Expiring soon" lead time (#228). Re-read from the database at the start of every status
     // refresh, so a change in Configuration applies on the next refresh without a restart.
     private Duration expiryWarningThreshold = Duration.ofMinutes(DatabaseManager.EXPIRY_WARNING_CHOICES.get(0));
@@ -105,6 +108,8 @@ public class SwingMain extends JFrame {
     // What trayMenu currently shows; it's only rebuilt when this changes (see updateTrayMenu()).
     private TrayMenuEntries lastTrayMenuEntries;
     private String lastTrayTooltip;
+    // The GUI Name column, kept while it's hidden from the view so it can be shown again (#227).
+    private javax.swing.table.TableColumn guiNameTableColumn;
     private final Map<String, Instant> lastNotifiedExpiration = new HashMap<>();
     private final Map<String, Instant> lastAutoRenewAttempt = new HashMap<>();
     private final Set<String> expiringSoonProfiles = new HashSet<>();
@@ -227,7 +232,7 @@ public class SwingMain extends JFrame {
         JPanel tokenStatusPanel = new JPanel(new BorderLayout());
         tokenStatusPanel.setBorder(BorderFactory.createTitledBorder("Credential Status"));
 
-        tokenStatusTableModel = new DefaultTableModel(new String[]{"Profile", "Account Number", "Status", "Expires At", "Time Remaining"}, 0) {
+        tokenStatusTableModel = new DefaultTableModel(new String[]{"Profile", "Account Number", "Status", "Expires At", "Time Remaining", "GUI Name"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
@@ -242,6 +247,11 @@ public class SwingMain extends JFrame {
         tokenStatusTable.setDefaultRenderer(Object.class, new StatusTableCellRenderer(expiringSoonProfiles, pinnedProfileOrder));
         tokenStatusRowSorter = new TableRowSorter<>(tokenStatusTableModel);
         tokenStatusTable.setRowSorter(tokenStatusRowSorter);
+        guiNameTableColumn = tokenStatusTable.getColumnModel().getColumn(GUI_NAME_COLUMN);
+        // JTable starts with every model column at the end; take it out and (re)insert it next to Profile if wanted.
+        tokenStatusTable.getColumnModel().removeColumn(guiNameTableColumn);
+        setGuiNameColumnVisible(databaseManager.getShowGuiNameColumn());
+        installStatusTableHeaderMenu();
         // Single source of truth for "which profile is selected to act on": any change to the
         // table's selected row (mouse click, keyboard arrow navigation, or the context menu's
         // own setRowSelectionInterval below) syncs the combo box, instead of each interaction
@@ -253,7 +263,7 @@ public class SwingMain extends JFrame {
             }
             int row = tokenStatusTable.getSelectedRow();
             if (row >= 0) {
-                profileComboBox.setSelectedItem(tokenStatusTable.getValueAt(row, 0));
+                profileComboBox.setSelectedItem(profileAtViewRow(tokenStatusTable, row));
             }
         });
         tokenStatusTable.setDragEnabled(true);
@@ -293,7 +303,7 @@ public class SwingMain extends JFrame {
         JLabel filterLabel = new JLabel("Filter:");
         filterPanel.add(filterLabel);
         profileFilterField = new JTextField(20);
-        profileFilterField.setToolTipText("Narrow the table below to profiles whose name contains this text");
+        profileFilterField.setToolTipText("Narrow the table below to profiles whose name or GUI name contains this text");
         filterLabel.setLabelFor(profileFilterField);
         filterPanel.add(profileFilterField);
         profileFilterField.getDocument().addDocumentListener(new DocumentListener() {
@@ -1019,6 +1029,63 @@ public class SwingMain extends JFrame {
         );
     }
 
+    /**
+     * The profile shown in a table view row. Column 0 of the <em>view</em> isn't necessarily Profile
+     * (headers can be dragged, and #227 adds a movable column), so always go through the model (#232).
+     */
+    static String profileAtViewRow(JTable table, int viewRow) {
+        return (String) table.getModel().getValueAt(table.convertRowIndexToModel(viewRow), PROFILE_COLUMN);
+    }
+
+    /** Shows the GUI Name column just after Profile wherever Profile currently is, or hides it; remembered (#227). */
+    private void setGuiNameColumnVisible(boolean visible) {
+        javax.swing.table.TableColumnModel columns = tokenStatusTable.getColumnModel();
+        boolean shown = false;
+        for (int i = 0; i < columns.getColumnCount(); i++) {
+            shown |= columns.getColumn(i) == guiNameTableColumn;
+        }
+        if (visible && !shown) {
+            columns.addColumn(guiNameTableColumn);
+            int profileView = tokenStatusTable.convertColumnIndexToView(PROFILE_COLUMN);
+            columns.moveColumn(columns.getColumnCount() - 1, profileView + 1);
+        } else if (!visible && shown) {
+            columns.removeColumn(guiNameTableColumn);
+        }
+    }
+
+    /** Right-click a column header to choose optional columns. */
+    private void installStatusTableHeaderMenu() {
+        JPopupMenu headerMenu = new JPopupMenu();
+        JMenuItem title = new JMenuItem("Show columns");
+        title.setEnabled(false);
+        headerMenu.add(title);
+        JCheckBoxMenuItem guiNameItem = new JCheckBoxMenuItem("GUI Name");
+        guiNameItem.addActionListener(e -> {
+            setGuiNameColumnVisible(guiNameItem.isSelected());
+            databaseManager.setShowGuiNameColumn(guiNameItem.isSelected());
+        });
+        headerMenu.add(guiNameItem);
+        tokenStatusTable.getTableHeader().setToolTipText("Click to sort, drag to reorder, right-click to choose columns");
+        tokenStatusTable.getTableHeader().addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                maybeShow(e);
+            }
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                maybeShow(e);
+            }
+
+            private void maybeShow(java.awt.event.MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    guiNameItem.setSelected(databaseManager.getShowGuiNameColumn());
+                    headerMenu.show(e.getComponent(), e.getX(), e.getY());
+                }
+            }
+        });
+    }
+
     private void updateExpiryWarningTexts() {
         if (batchRefreshMenuItem != null) {
             batchRefreshMenuItem.setToolTipText("Renew credentials (via browser login) for every profile that's "
@@ -1096,7 +1163,9 @@ public class SwingMain extends JFrame {
             });
 
             for (TokenStatusRow row : rows) {
-                tokenStatusTableModel.addRow(new Object[]{row.getProfile(), row.getAccountNumber(), row.getStatus(), row.getExpiresAt(), row.getTimeRemaining()});
+                String guiName = configManager.getGuiName(row.getProfile());
+                tokenStatusTableModel.addRow(new Object[]{row.getProfile(), row.getAccountNumber(), row.getStatus(),
+                    row.getExpiresAt(), row.getTimeRemaining(), guiName != null ? guiName : ""});
             }
 
             lastRefreshedLabel.setText("Last refreshed: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
@@ -1121,7 +1190,8 @@ public class SwingMain extends JFrame {
 
         String filterText = profileFilterField.getText();
         if (filterText != null && !filterText.isBlank()) {
-            filters.add(RowFilter.regexFilter("(?i)" + Pattern.quote(filterText), 0));
+            // Matches the profile name or its GUI name, whether or not the GUI Name column is shown (#227).
+            filters.add(RowFilter.regexFilter("(?i)" + Pattern.quote(filterText), PROFILE_COLUMN, GUI_NAME_COLUMN));
         }
 
         Set<String> allowedStatuses = new HashSet<>();
@@ -1442,7 +1512,7 @@ public class SwingMain extends JFrame {
     private void refreshSelectedProfiles() {
         List<String> targets = new ArrayList<>();
         for (int row : tokenStatusTable.getSelectedRows()) {
-            targets.add((String) tokenStatusTable.getValueAt(row, 0));
+            targets.add(profileAtViewRow(tokenStatusTable, row));
         }
         runBatchRefresh(targets, "Refresh Selected Profiles",
             "No profiles are selected in the status table.");
@@ -1663,7 +1733,7 @@ public class SwingMain extends JFrame {
 
             // Registered as the table's default renderer (all columns), so bold-face the whole
             // pinned row rather than just the status column.
-            String rowProfile = (String) table.getValueAt(row, 0);
+            String rowProfile = profileAtViewRow(table, row);
             component.setFont(component.getFont().deriveFont(
                 pinnedProfiles.contains(rowProfile) ? Font.BOLD : Font.PLAIN));
 
@@ -1671,9 +1741,9 @@ public class SwingMain extends JFrame {
             if ("Status".equals(table.getModel().getColumnName(modelColumn)) && value instanceof String status) {
                 switch (status) {
                     case "VALID" -> {
-                        // getValueAt (unlike the table model) takes view coordinates, so this
-                        // stays correct under the row sorter/filter.
-                        String profile = (String) table.getValueAt(row, 0);
+                        // Via the model's Profile column, so it stays right under sorting, filtering
+                        // and dragged-around columns (#232).
+                        String profile = profileAtViewRow(table, row);
                         component.setForeground(expiringSoonProfiles.contains(profile)
                             ? expiringSoonForeground() : new Color(0, 128, 0));
                     }
@@ -1739,7 +1809,7 @@ public class SwingMain extends JFrame {
             if (viewRow < 0) {
                 return null;
             }
-            return new StringSelection((String) tokenStatusTable.getValueAt(viewRow, 0));
+            return new StringSelection(profileAtViewRow(tokenStatusTable, viewRow));
         }
 
         @Override
@@ -1777,7 +1847,7 @@ public class SwingMain extends JFrame {
         if (targetViewRow < 0 || targetViewRow >= tokenStatusTable.getRowCount()) {
             insertIndex = pinned.size();
         } else {
-            String targetProfile = (String) tokenStatusTable.getValueAt(targetViewRow, 0);
+            String targetProfile = profileAtViewRow(tokenStatusTable, targetViewRow);
             int existingIndex = pinned.indexOf(targetProfile);
             insertIndex = (existingIndex >= 0) ? existingIndex : pinned.size();
         }

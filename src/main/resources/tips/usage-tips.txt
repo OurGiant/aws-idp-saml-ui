@@ -21,7 +21,7 @@ Refresh several profiles at once
 <i>Actions &rarr; Refresh Expiring/Expired Profiles...</i> renews everything that has run out or is about to. To have pinned profiles renewed for you, turn on <b>auto-renew</b> in <i>File &rarr; Configuration</i>.
 ---
 Find a profile quickly
-Type in the <b>Filter</b> box above the status table to narrow it by name, and use the status checkboxes to show only valid, expired or unknown profiles. Click a column header to sort.
+Type in the <b>Filter</b> box above the status table to narrow it by profile or GUI name, and use the status checkboxes to show only valid, expired or unknown profiles. Click a column header to sort; right-click one to show the <b>GUI Name</b> column.
 ---
 Move to a new machine, or share a setup
 <i>File &rarr; Export Profiles...</i> saves your profiles and settings to a file; <i>Import Profiles...</i> loads it elsewhere. The file never contains credentials or passwords.
