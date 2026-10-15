@@ -7,6 +7,8 @@ import software.amazon.awssdk.services.sts.model.IdpCommunicationErrorException;
 import software.amazon.awssdk.services.sts.model.StsException;
 
 import javax.swing.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -28,9 +30,21 @@ public class CredentialRequestError {
     private final String detail;
     private final boolean retryable;
     private final int iconMessageType;
+    private final String listHeading;
+    private final List<String> listItems;
+
+    /** Most roles a role-not-found dialog lists before summarizing the rest, so it can't outgrow the screen. */
+    static final int MAX_LISTED_ROLES = 12;
 
     private CredentialRequestError(Category category, String title, String guidance, String detail,
                                     boolean retryable, int iconMessageType) {
+        this(category, title, guidance, detail, retryable, iconMessageType, null, List.of());
+    }
+
+    private CredentialRequestError(Category category, String title, String guidance, String detail,
+                                    boolean retryable, int iconMessageType, String listHeading, List<String> listItems) {
+        this.listHeading = listHeading;
+        this.listItems = listItems;
         this.category = category;
         this.title = title;
         this.guidance = guidance;
@@ -62,6 +76,11 @@ public class CredentialRequestError {
                 message, false, JOptionPane.ERROR_MESSAGE);
         }
 
+        RoleNotFoundException roleNotFound = findCause(root, RoleNotFoundException.class);
+        if (roleNotFound != null) {
+            return roleNotFound(roleNotFound);
+        }
+
         if (root instanceof IllegalArgumentException) {
             return new CredentialRequestError(Category.CONFIGURATION, "Configuration Error",
                 "This profile or SAML provider is missing required configuration.",
@@ -91,6 +110,48 @@ public class CredentialRequestError {
         return new CredentialRequestError(Category.UNKNOWN, "Authentication Error",
             "An unexpected error occurred while requesting credentials.",
             message, true, JOptionPane.ERROR_MESSAGE);
+    }
+
+    private static CredentialRequestError roleNotFound(RoleNotFoundException e) {
+        String wanted = e.accountNumber() + " / " + e.iamRole();
+        if (e.availableRoles().isEmpty()) {
+            return new CredentialRequestError(Category.CONFIGURATION, "Role Not Found",
+                "The identity provider didn't return any AWS roles, so " + wanted + " can't be assumed. "
+                    + "Your IdP user may not be assigned to the AWS app, or the app's role mapping is missing.",
+                e.getMessage(), false, JOptionPane.ERROR_MESSAGE);
+        }
+
+        List<String> items = new ArrayList<>();
+        for (SamlRole role : e.nearMatches()) {
+            items.add("<b>" + escapeHtml(role.accountNumber() + " / " + role.roleName()) + "</b> ("
+                + nearMatchReason(role, e) + ")");
+        }
+        for (SamlRole role : e.availableRoles()) {
+            if (!e.nearMatches().contains(role)) {
+                items.add(escapeHtml(role.accountNumber() + " / " + role.roleName()));
+            }
+        }
+        if (items.size() > MAX_LISTED_ROLES) {
+            int hidden = items.size() - MAX_LISTED_ROLES;
+            items = new ArrayList<>(items.subList(0, MAX_LISTED_ROLES));
+            items.add("…and " + hidden + " more");
+        }
+
+        String guidance = "The identity provider didn't return the role this profile is configured for ("
+            + wanted + "). Check the profile's account number and IAM role";
+        guidance += e.nearMatches().isEmpty()
+            ? ", or ask for access to that account."
+            : " — a likely match is highlighted below.";
+        return new CredentialRequestError(Category.CONFIGURATION, "Role Not Found", guidance,
+            e.getMessage(), false, JOptionPane.ERROR_MESSAGE,
+            "Roles available to you:", items);
+    }
+
+    private static String nearMatchReason(SamlRole role, RoleNotFoundException e) {
+        if (!role.accountNumber().equals(e.accountNumber())) {
+            return "same role, different account";
+        }
+        return role.roleName().equalsIgnoreCase(e.iamRole()) ? "same role, different capitalization" : "same account";
     }
 
     private static Throwable unwrapExecutionException(Throwable t) {
@@ -141,8 +202,21 @@ public class CredentialRequestError {
     public String htmlMessage() {
         return "<html><body style='width: 320px'>"
             + "<p>" + escapeHtml(guidance) + "</p>"
+            + roleListHtml()
             + "<p style='color: gray; font-size: 90%;'>" + escapeHtml(detail) + "</p>"
             + "</body></html>";
+    }
+
+    /** List items are already HTML-escaped (they may carry their own markup, e.g. a bolded closest match). */
+    private String roleListHtml() {
+        if (listItems.isEmpty()) {
+            return "";
+        }
+        StringBuilder html = new StringBuilder("<p>").append(escapeHtml(listHeading)).append("</p><ul>");
+        for (String item : listItems) {
+            html.append("<li>").append(item).append("</li>");
+        }
+        return html.append("</ul>").toString();
     }
 
     public String statusMessage() {

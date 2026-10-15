@@ -44,10 +44,12 @@ class SamlAuthenticatorTest {
                 new SamlRole("arn:aws:iam::123456789012:role/AdminRole", "arn:aws:iam::123456789012:saml-provider/Okta")
         );
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        RoleNotFoundException ex = assertThrows(RoleNotFoundException.class,
                 () -> authenticator().findMatchingRole(roles, "999999999999", "AdminRole"));
 
-        assertEquals("Matching role not found in SAML response: 999999999999/AdminRole", ex.getMessage());
+        assertEquals("Matching role not found in SAML response: 999999999999/AdminRole"
+                + " (assertion has 1 role; closest: 123456789012/AdminRole)", ex.getMessage());
+        assertEquals(roles, ex.availableRoles());
     }
 
     @Test

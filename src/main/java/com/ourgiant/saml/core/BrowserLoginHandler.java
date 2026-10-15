@@ -516,10 +516,29 @@ public class BrowserLoginHandler {
         }
 
         if (showBrowser) {
+            requireRoleInAssertion(samlResponse);
             selectRoleAndSignIn();
         }
 
         return samlResponse;
+    }
+
+    /**
+     * Fails fast with the roles the assertion does contain, rather than waiting out the timeout
+     * for a role element on the AWS page that can never appear. If the assertion can't be parsed
+     * here, falls through to the page-based selection, which reports its own error.
+     */
+    void requireRoleInAssertion(String samlResponse) {
+        java.util.List<SamlRole> roles;
+        try {
+            roles = new SamlParser().parseRolesFromSaml(samlResponse);
+        } catch (Exception e) {
+            logger.warn("Could not parse roles from SAML response before role selection", e);
+            return;
+        }
+        if (SamlRole.find(roles, accountNumber, iamRole) == null) {
+            throw new RoleNotFoundException(accountNumber, iamRole, roles);
+        }
     }
 
     /**
