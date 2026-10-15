@@ -96,6 +96,14 @@ provider and your first AWS profile, and writes the result to `~/.aws/samlsts`.
 - **Open Console**: launch the AWS Management Console in your browser using the current profile's credentials
 - **Credential Status table**: shows every known profile with its status, expiration time, and time remaining; filter by profile name and/or status, right-click a row for quick actions (request/show credentials, open console, copy account number, pin, delete)
 - **Configuration**: session duration, password storage, theme, browser, notifications, startup behavior, and a Force Refresh action to immediately clean up stale profiles
+- **View Logs** (File menu): a live, auto-refreshing view of the application log and the startup log, with a button to open the log folder
+
+### Logs
+
+Logs are written to `~/.aws-idp-saml-ui/logs/`:
+
+- `app.log` — the application log (rotated daily, 7 days kept)
+- `startup.log` — one entry per launch (version, Java, OS) and whether startup completed, was cancelled, or failed, with the full stack trace for failures. It is written without the logging framework so it still captures failures caused by logging setup itself. If the app fails to start, an error dialog points to this file.
 
 ## Configuration
 
@@ -232,7 +240,8 @@ src/main/java/com/ourgiant/saml/
 │   ├── CredentialsDialog.java     # Credential detail/export UI
 │   ├── ConfigurationDialog.java   # Application settings UI
 │   ├── ProfileManagerDialog.java  # Profile list management UI
-│   └── ProfileEditDialog.java     # Add/edit a single profile
+│   ├── ProfileEditDialog.java     # Add/edit a single profile
+│   └── LogViewerDialog.java       # In-app viewer for the app and startup logs
 ├── core/                          # Domain logic - no javax.swing.* dependency
 │   ├── SamlAuthenticator.java     # SAML authentication flow orchestration
 │   ├── SamlParser.java            # SAML assertion parsing (XXE-hardened)
@@ -248,7 +257,9 @@ src/main/java/com/ourgiant/saml/
 │   └── PasswordManager.java       # Password encryption/decryption
 └── util/                          # Shared helpers with no business meaning of their own
     ├── FilePermissions.java       # Owner-only file permission enforcement
-    └── JsonUtil.java              # Minimal JSON string-value extraction
+    ├── JsonUtil.java              # Minimal JSON string-value extraction
+    ├── LogPaths.java              # Locations of the app's log files
+    └── StartupLog.java            # Per-launch startup success/failure record
 ```
 
 ### CI/CD
@@ -277,4 +288,4 @@ MIT — see [LICENSE](LICENSE) for details.
 - Check browser compatibility for Selenium WebDriver (Chrome, Firefox, or Edge)
 - Verify your `samlsts` configuration and SAML provider settings via the Configuration/Profile Manager dialogs
 - If a profile lingers in the status table after being removed from `samlsts`, use **Configuration → Force Refresh** to prune it immediately
-- Review the application log (`aws-saml-ui.log`, alongside the jar) for error details
+- Review the logs via **File → View Logs...**, or directly in `~/.aws-idp-saml-ui/logs/` (`app.log` for errors during use, `startup.log` if the app fails to open)
