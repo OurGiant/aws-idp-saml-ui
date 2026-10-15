@@ -34,3 +34,60 @@ Keyboard shortcuts
 ---
 Something not working?
 <i>Help &rarr; View Logs...</i> shows what the app has been doing, including a startup log if it ever fails to open. <b>Open Log Folder</b> takes you to the files to share when asking for help.
+---
+Read the status colors
+In the status table, the Status column is <b>green</b> while credentials are valid, <b>amber</b> in the last 5 minutes before they expire, <b>red</b> once expired, and grey when the app doesn't know.
+---
+Get a heads-up before credentials expire
+Turn on <i>Show tray notification before credentials expire</i> in <i>File &rarr; Configuration</i> and you'll get a tray notification a few minutes before a profile runs out, even with the window closed.
+---
+Refresh just the profiles you pick
+Select several rows in the status table with <b>Ctrl</b>-click or <b>Shift</b>-click, then choose <i>Actions &rarr; Refresh Selected Profiles...</i>.
+---
+One login, many profiles
+When refreshing several profiles at once, the app logs in once per identity provider and reuses that login for every profile that shares it, so you aren't asked to sign in over and over.
+---
+Changed your mind? Cancel
+While a login is running, the <b>Request Credentials</b> button becomes <b>Cancel</b>, and a batch refresh shows <b>Cancel Batch Refresh</b>. The browser is closed for you.
+---
+Watch the login happen
+Tick <b>Show browser</b> before requesting credentials to see the login window, for example to complete an MFA prompt or see where a login is getting stuck. Batch refreshes always run in the background.
+---
+Skip typing your password
+In <i>File &rarr; Configuration &rarr; Password Storage</i>, <b>Store and use Okta password</b> keeps your password encrypted on this computer for as long as you choose. <b>Forget Password</b> clears it at any time.
+---
+Sign in with Okta FastPass
+If your organization uses Okta Verify, turn on <b>Use Okta FastPass</b> in <i>File &rarr; Configuration</i> to sign in with your device instead of a password.
+---
+Choose how long credentials last
+Set the session length in <i>File &rarr; Configuration &rarr; Session</i>. AWS won't issue credentials for longer than the role's maximum session duration in IAM, so ask your AWS admin if you need more.
+---
+Light or dark
+Pick a theme in <i>File &rarr; Configuration &rarr; Appearance</i>. There are several light and dark themes, and the change applies immediately.
+---
+Use the browser you prefer
+Logins can run in Chrome, Firefox or Edge. Choose one in <i>File &rarr; Configuration &rarr; Browser</i>.
+---
+Keep it running in the background
+Closing the window doesn't quit the app; it keeps watching your credentials from the system tray. Turn on <i>Start minimized to tray</i> to skip the window at launch, and use <i>File &rarr; Exit</i> or the tray menu to quit.
+---
+Several AWS consoles side by side
+<b>Open Console</b> opens each profile in its own browser window with its own cookies, so you can be signed in to different accounts at the same time without them interfering.
+---
+Hand credentials to a script safely
+Put a <code>public_key.pem</code> in your <code>~/.aws</code> folder and the <b>Encrypted</b> button gives you the current credentials as an encrypted string that only the matching private key can read.
+---
+Prefer editing files?
+Profiles live in <code>~/.aws/samlsts</code>, a plain INI file. You can edit it by hand; the app picks up changes on its next status refresh (every 30 seconds) or when you click <b>Refresh Status</b>.
+---
+Tidy up removed profiles
+Profiles you delete from <code>samlsts</code> drop out of the status table after a short grace period. To remove them right away, use <b>Force Refresh</b> in <i>File &rarr; Configuration &rarr; Data</i>.
+---
+Try again with one click
+When a login times out or hits a temporary problem, the error message offers <b>Retry</b>, so you don't have to start over.
+---
+See what the login page showed
+If a login step fails, the app saves a screenshot of the page to <code>~/.aws/login-failure-screenshots</code>. It's handy for seeing an unexpected prompt or for sharing when asking for help.
+---
+Stay up to date
+The app checks for new versions in the background and lets you know when one is available. <i>Help &rarr; What's New</i> shows every release, and <i>Help &rarr; Release Notes</i> shows what changed in yours.
