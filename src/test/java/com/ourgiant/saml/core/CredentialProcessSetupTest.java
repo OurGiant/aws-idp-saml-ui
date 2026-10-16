@@ -16,8 +16,13 @@ class CredentialProcessSetupTest {
 
     @Test
     void otherwiseJavaDashJarWithQuotedPaths() {
-        assertEquals("\"/opt/jdk/bin/java\" -jar \"/home/me/my apps/aws-idp-saml-ui-all.jar\"",
-            CredentialProcessSetup.launchCommand(null, Path.of("/opt/jdk"), Path.of("/home/me/my apps/aws-idp-saml-ui-all.jar"), false));
+        // Paths print in the platform's own format (backslashes on Windows), which is what the AWS CLI there needs.
+        Path javaHome = Path.of("/opt/jdk");
+        Path jar = Path.of("/home/me/my apps/aws-idp-saml-ui-all.jar");
+        assertEquals("\"" + javaHome.resolve("bin").resolve("java") + "\" -jar \"" + jar + "\"",
+            CredentialProcessSetup.launchCommand(null, javaHome, jar, false));
+        assertEquals("\"" + javaHome.resolve("bin").resolve("java.exe") + "\" -jar \"" + jar + "\"",
+            CredentialProcessSetup.launchCommand(null, javaHome, jar, true));
     }
 
     @Test
