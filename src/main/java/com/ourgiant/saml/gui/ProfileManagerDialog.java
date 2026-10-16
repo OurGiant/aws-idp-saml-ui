@@ -8,6 +8,9 @@ import org.slf4j.LoggerFactory;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -66,6 +69,9 @@ public class ProfileManagerDialog extends JDialog {
         JButton deleteButton = new JButton("Delete");
         deleteButton.setMnemonic(KeyEvent.VK_D);
         deleteButton.setToolTipText("Delete the selected profile");
+        JButton duplicateButton = new JButton("Duplicate...");
+        duplicateButton.setMnemonic(KeyEvent.VK_U);
+        duplicateButton.setToolTipText("Start a new profile from a copy of the selected one");
         JButton importButton = new JButton("Import from IdP...");
         importButton.setMnemonic(KeyEvent.VK_I);
         importButton.setToolTipText("Log in to an identity provider once and create profiles from the AWS roles it grants you");
@@ -73,9 +79,10 @@ public class ProfileManagerDialog extends JDialog {
         addButton.addActionListener(e -> onAdd());
         editButton.addActionListener(e -> onEdit());
         deleteButton.addActionListener(e -> onDelete());
+        duplicateButton.addActionListener(e -> onDuplicate());
         importButton.addActionListener(e -> onImport());
 
-        for (JButton button : new JButton[]{addButton, editButton, deleteButton, importButton}) {
+        for (JButton button : new JButton[]{addButton, editButton, duplicateButton, deleteButton, importButton}) {
             button.setAlignmentX(Component.LEFT_ALIGNMENT);
             button.setMaximumSize(new Dimension(Integer.MAX_VALUE, button.getPreferredSize().height));
             sideButtonPanel.add(button);
@@ -153,6 +160,40 @@ public class ProfileManagerDialog extends JDialog {
         if (dialog.isSaved()) {
             profilesChanged = true;
             loadProfileList();
+        }
+    }
+
+    /** Opens Add Profile pre-filled from the selected profile, copying every key in its section (#229). */
+    private void onDuplicate() {
+        String selected = profileList.getSelectedValue();
+        if (selected == null) {
+            JOptionPane.showMessageDialog(this,
+                "Select a profile to duplicate.",
+                "No Profile Selected",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        Map<String, String> template = configManager.getAllSections().getOrDefault(selected, Map.of());
+        String suggested = suggestCopyName(selected, new HashSet<>(configManager.getAvailableProfiles()));
+        ProfileEditDialog dialog = ProfileEditDialog.forDuplicate((Frame) getParent(), configManager, template, suggested);
+        dialog.setVisible(true);
+        if (dialog.isSaved()) {
+            profilesChanged = true;
+            loadProfileList();
+            profileList.setSelectedValue(dialog.getSavedProfileName(), true);
+        }
+    }
+
+    /** {@code <name>-copy}, or {@code <name>-copy-2}, {@code -copy-3}... if that's taken. */
+    static String suggestCopyName(String name, Set<String> existing) {
+        String base = name + "-copy";
+        if (!existing.contains(base)) {
+            return base;
+        }
+        for (int n = 2; ; n++) {
+            if (!existing.contains(base + "-" + n)) {
+                return base + "-" + n;
+            }
         }
     }
 

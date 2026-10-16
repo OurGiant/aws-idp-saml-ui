@@ -21,6 +21,10 @@ public class ProfileEditDialog extends JDialog {
 
     private final ConfigManager configManager;
     private final String originalProfileName; // null when adding a new profile
+    // When duplicating (#229): the source profile's whole samlsts section, so keys this dialog doesn't
+    // show (awsregion, username, ...) are copied too. Null otherwise.
+    private final Map<String, String> template;
+    private String savedProfileName;
 
     private JTextField profileNameField;
     private JTextField guiNameField;
@@ -33,13 +37,30 @@ public class ProfileEditDialog extends JDialog {
     private boolean saved = false;
 
     public ProfileEditDialog(Frame parent, ConfigManager configManager, String profileName) {
-        super(parent, profileName == null ? "Add Profile" : "Edit Profile", true);
+        this(parent, configManager, profileName, null, profileName == null ? "Add Profile" : "Edit Profile");
+    }
+
+    /** Add Profile pre-filled from {@code template} (a profile's samlsts section) under {@code suggestedName}. */
+    static ProfileEditDialog forDuplicate(Frame parent, ConfigManager configManager, Map<String, String> template,
+                                          String suggestedName) {
+        ProfileEditDialog dialog = new ProfileEditDialog(parent, configManager, null, template, "Duplicate Profile");
+        dialog.profileNameField.setText(suggestedName);
+        dialog.profileNameField.selectAll();
+        return dialog;
+    }
+
+    private ProfileEditDialog(Frame parent, ConfigManager configManager, String profileName,
+                              Map<String, String> template, String title) {
+        super(parent, title, true);
         this.configManager = configManager;
         this.originalProfileName = profileName;
+        this.template = template;
 
         initializeUI();
         if (profileName != null) {
             loadExistingProfile(profileName);
+        } else if (template != null) {
+            loadFields(template, true);
         }
         pack();
         setMinimumSize(new Dimension(380, getHeight()));
@@ -48,6 +69,11 @@ public class ProfileEditDialog extends JDialog {
 
     public boolean isSaved() {
         return saved;
+    }
+
+    /** The name the profile was saved under (after a save). */
+    public String getSavedProfileName() {
+        return savedProfileName;
     }
 
     private void initializeUI() {
@@ -141,6 +167,15 @@ public class ProfileEditDialog extends JDialog {
         return row;
     }
 
+    private static Integer parseSeconds(String value) {
+        try {
+            int seconds = value == null ? 0 : Integer.parseInt(value.trim());
+            return seconds > 0 ? seconds : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
     }
@@ -152,12 +187,21 @@ public class ProfileEditDialog extends JDialog {
         if (section == null) {
             return;
         }
-        guiNameField.setText(section.get("guiname", ""));
-        accountNumberField.setText(section.get("accountnumber", ""));
-        iamRoleField.setText(section.get("iamrole", ""));
-        samlProviderCombo.setSelectedItem(section.get("samlprovider", ""));
+        Map<String, String> fields = new LinkedHashMap<>();
+        for (String key : section.keySet()) {
+            fields.put(key, section.get(key));
+        }
+        loadFields(fields, false);
+    }
 
-        Integer own = configManager.getProfileSessionDuration(profileName);
+    private void loadFields(Map<String, String> section, boolean asCopy) {
+        String guiName = section.getOrDefault("guiname", "");
+        guiNameField.setText(asCopy && !guiName.isBlank() ? guiName + " (copy)" : guiName);
+        accountNumberField.setText(section.getOrDefault("accountnumber", ""));
+        iamRoleField.setText(section.getOrDefault("iamrole", ""));
+        samlProviderCombo.setSelectedItem(section.getOrDefault("samlprovider", ""));
+
+        Integer own = parseSeconds(section.get("sessionduration"));
         if (own != null) {
             SpinnerNumberModel model = (SpinnerNumberModel) durationSpinner.getModel();
             // An out-of-range legacy value (e.g. hand-edited) is shown clamped; saving stores the clamped value.
@@ -193,6 +237,14 @@ public class ProfileEditDialog extends JDialog {
         }
 
         Map<String, String> fields = new LinkedHashMap<>();
+        if (template != null) {
+            // Carry over keys this dialog doesn't edit; the ones it does are set just below.
+            template.forEach((key, value) -> {
+                if (!Set.of("guiname", "accountnumber", "iamrole", "samlprovider", "sessionduration").contains(key)) {
+                    fields.put(key, value);
+                }
+            });
+        }
         fields.put("guiname", guiName);
         fields.put("accountnumber", accountNumber);
         fields.put("iamrole", iamRole);
@@ -210,6 +262,7 @@ public class ProfileEditDialog extends JDialog {
             }
             configManager.saveProfile(profileName, fields, removeKeys);
             saved = true;
+            savedProfileName = profileName;
             setVisible(false);
         } catch (Exception ex) {
             logger.error("Failed to save profile: {}", profileName, ex);
