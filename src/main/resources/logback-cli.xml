@@ -1,0 +1,6 @@
+<!-- Used by the credential_process CLI mode (#222): its stdout must carry only the credential
+     JSON, and it shouldn't append to the GUI's log file on every AWS CLI call, so all logging is off. -->
+<configuration>
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener"/>
+    <root level="OFF"/>
+</configuration>

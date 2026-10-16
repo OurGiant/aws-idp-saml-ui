@@ -24,6 +24,7 @@ that touches AWS console/CLI access.
 - Import profiles from your identity provider: log in once (Manage Profiles → Import from IdP...), and every AWS role it grants you is listed to tick and import, with no account numbers or role names to look up
 - One-click AWS Management Console launch via the STS federation endpoint, landing on each profile's region or a chosen console page (set in Manage Profiles → Edit; only AWS console addresses are accepted)
 - Clear Credentials (right-click) and Actions → Clear All Credentials remove this app's profiles' credentials from `~/.aws/credentials` without touching anything else in that file; optionally clear them automatically when the app exits (e.g. on a shared computer)
+- Acts as an AWS `credential_process` source, so the AWS CLI, SDKs and Terraform can fetch a profile's current credentials from the app (right-click → Copy AWS CLI Setup...)
 - Check Identity (right-click a profile): asks AWS STS who the saved credentials belong to (account, role, ARN), confirms they still work, and warns if they're for a different account than the profile expects
 - Adds each profile's region to `~/.aws/config` when it has none, so `aws --profile <name>` works right away (only ever adds a line; existing settings are left alone; can be turned off in Configuration)
 
@@ -140,6 +141,32 @@ commands. A **Format** selector switches between bash/zsh (`export …`),
 PowerShell (`$env:… = '…'`), Command Prompt (`set "…"`), and plain `KEY=value`
 lines for `.env` files. Values are quoted for the chosen shell. The default
 is the platform's native shell, and the last choice is remembered.
+
+### Using the app as an AWS credential source (`credential_process`)
+
+The AWS CLI, SDKs and tools like Terraform can ask the app for a profile's credentials on
+demand. Right-click a profile and choose **Copy AWS CLI Setup...** to get the exact lines for
+your install, then add them to `~/.aws/config` (`%USERPROFILE%\.aws\config` on Windows):
+
+```ini
+# macOS / Linux, running the jar
+[profile dev-cli]
+credential_process = "/path/to/java" -jar "/path/to/aws-idp-saml-ui-all.jar" --credential-process dev
+region = eu-west-1
+
+# Windows installer build (the native launcher)
+[profile dev-cli]
+credential_process = "C:\path\to\AWS IDP SAML\AWS IDP SAML.exe" --credential-process dev
+```
+
+Then `aws --profile dev-cli s3 ls` gets `dev`'s current credentials from the app. When they've
+expired, the CLI shows a message asking you to refresh them in the app. The mode never opens a
+window, only reads `~/.aws/credentials` and the app's database (read-only), and works while the
+app is running.
+
+Use a **different** profile name (the suggested `-cli` suffix) from the app's profile: for the
+same name, the AWS CLI uses the static keys the app writes to `~/.aws/credentials` before it
+would ever run `credential_process`.
 
 ## Security
 
