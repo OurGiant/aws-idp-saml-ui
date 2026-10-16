@@ -53,6 +53,8 @@ public class BrowserLoginHandler {
     private final String iamRole;
     private final Consumer<String> statusCallback;
     private final BooleanSupplier cancelled;
+    // HTML of AWS's sign-in (role selection) page, kept for role discovery so account aliases can be read (#244).
+    private volatile String signInPageSource;
 
     public BrowserLoginHandler(WebDriver driver, boolean useOktaFastPass, PasswordManager passwordManager,
                                 boolean showBrowser, String accountNumber, String iamRole,
@@ -515,6 +517,14 @@ public class BrowserLoginHandler {
             throw new RuntimeException("SAML response not found in AWS sign-in page");
         }
 
+        if (accountNumber == null) {
+            try {
+                signInPageSource = driver.getPageSource();
+            } catch (RuntimeException e) {
+                logger.debug("Couldn't read the AWS sign-in page for account aliases", e);
+            }
+        }
+
         // No account/role means role discovery (#194): only the assertion is wanted, not a console sign-in.
         if (showBrowser && accountNumber != null) {
             requireRoleInAssertion(samlResponse);
@@ -522,6 +532,11 @@ public class BrowserLoginHandler {
         }
 
         return samlResponse;
+    }
+
+    /** The AWS sign-in page's HTML from a role-discovery login, or null. */
+    String getSignInPageSource() {
+        return signInPageSource;
     }
 
     /**

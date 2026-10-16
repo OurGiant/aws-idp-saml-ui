@@ -64,6 +64,21 @@ class RoleImportPlannerTest {
     }
 
     @Test
+    void plan_usesAccountAliasForNamesWhenKnown() {
+        List<Candidate> plan = RoleImportPlanner.plan(List.of(
+                role("111111111111", "Admin", "Okta"),
+                role("222222222222", "ReadOnly", "Okta")), "Fed-Okta", Map.of(),
+            Map.of("111111111111", "payments-prod"));
+
+        assertEquals("payments-prod-admin", plan.get(0).suggestedProfileName());
+        assertEquals("Admin (payments-prod)", plan.get(0).suggestedGuiName());
+        assertEquals("payments-prod", plan.get(0).accountAlias());
+        assertEquals("222222222222-readonly", plan.get(1).suggestedProfileName(), "no alias: account number");
+        assertEquals("ReadOnly (222222222222)", plan.get(1).suggestedGuiName());
+        assertNull(plan.get(1).accountAlias());
+    }
+
+    @Test
     void sanitize_keepsOnlyCliSafeCharacters() {
         assertEquals("123-my-role", RoleImportPlanner.sanitize("123 / My Role!"));
         assertEquals("a.b_c-d", RoleImportPlanner.sanitize("A.b_c-D"));
