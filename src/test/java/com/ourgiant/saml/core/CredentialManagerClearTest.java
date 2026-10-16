@@ -20,6 +20,7 @@ class CredentialManagerClearTest {
     @TempDir
     Path tempHome;
     private String originalUserHome;
+    private CredentialManager manager;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -32,7 +33,14 @@ class CredentialManagerClearTest {
     }
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws Exception {
+        // CredentialManager's TokenStateManager keeps its own SQLite connection open; close it so @TempDir
+        // can delete the database (Windows refuses to delete open files, as in ConfigManagerTest).
+        if (manager != null) {
+            java.lang.reflect.Field field = CredentialManager.class.getDeclaredField("tokenStateManager");
+            field.setAccessible(true);
+            ((TokenStateManager) field.get(manager)).close();
+        }
         System.setProperty("user.home", originalUserHome);
     }
 
@@ -40,7 +48,7 @@ class CredentialManagerClearTest {
     void clearCredentials_removesSectionAndExpiry_keepingOtherEntries() throws Exception {
         DatabaseManager db = new DatabaseManager();
         db.updateExpiration("dev", Instant.now().plusSeconds(3600));
-        CredentialManager manager = new CredentialManager();
+        manager = new CredentialManager();
         assertNotNull(manager.getCredentials("dev"));
 
         Set<String> removed = manager.clearCredentials(Set.of("dev", "never-had-any"));
