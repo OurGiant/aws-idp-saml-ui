@@ -1911,6 +1911,11 @@ public class SwingMain extends JFrame {
         checkIdentityItem.addActionListener(e -> checkIdentityForProfile(contextMenuTargetProfile));
         menu.add(checkIdentityItem);
 
+        JMenuItem cliSetupItem = new JMenuItem("Copy AWS CLI Setup...");
+        cliSetupItem.setToolTipText("Let the AWS CLI and SDKs get this profile's credentials from this app (credential_process)");
+        cliSetupItem.addActionListener(e -> showCredentialProcessSetup(contextMenuTargetProfile));
+        menu.add(cliSetupItem);
+
         JMenuItem copyAccountItem = new JMenuItem("Copy Account Number");
         copyAccountItem.addActionListener(e -> copyAccountNumberForProfile(contextMenuTargetProfile));
         menu.add(copyAccountItem);
@@ -1945,6 +1950,7 @@ public class SwingMain extends JFrame {
                 showEncryptedItem.setEnabled(hasCredentials && hasPublicKey);
                 openConsoleItem.setEnabled(hasCredentials);
                 checkIdentityItem.setEnabled(hasCredentials);
+                cliSetupItem.setEnabled(profile != null && configManager.getAvailableProfiles().contains(profile));
                 copyAccountItem.setEnabled(profile != null && hasAccountNumber(profile));
                 pinItem.setText(profile != null && databaseManager.isProfilePinned(profile)
                     ? "Unpin Profile" : "Pin Profile");
@@ -2065,6 +2071,56 @@ public class SwingMain extends JFrame {
 
     private static String escapeHtml(String s) {
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    /**
+     * Copy AWS CLI Setup (#222): the ~/.aws/config lines that make the AWS CLI and SDKs ask this app
+     * for the profile's credentials, with the right launch command for how this copy was started.
+     */
+    private void showCredentialProcessSetup(String profileName) {
+        if (profileName == null) {
+            return;
+        }
+        String command;
+        try {
+            java.nio.file.Path jar = java.nio.file.Paths.get(
+                com.ourgiant.saml.Launcher.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            command = com.ourgiant.saml.core.CredentialProcessSetup.launchCommand(System.getProperty("jpackage.app-path"),
+                java.nio.file.Paths.get(System.getProperty("java.home")), jar,
+                System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows"));
+        } catch (Exception ex) {
+            logger.error("Couldn't work out how this app was launched", ex);
+            JOptionPane.showMessageDialog(this, "Couldn't work out this app's launch command: " + ex.getMessage(),
+                "AWS CLI Setup", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        String snippet = com.ourgiant.saml.core.CredentialProcessSetup.configSnippet(profileName, command,
+            configManager.getExplicitAwsRegion(profileName));
+        String cliProfile = com.ourgiant.saml.core.CredentialProcessSetup.cliProfileName(profileName);
+
+        JTextArea text = new JTextArea(snippet);
+        text.setEditable(false);
+        text.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        text.setRows(4);
+        JLabel intro = new JLabel("<html><body style='width: 460px'>Add these lines to <code>~/.aws/config</code> "
+            + "(on Windows, <code>%USERPROFILE%\\.aws\\config</code>). Then the AWS CLI, SDKs and tools like Terraform "
+            + "can use <b>--profile " + escapeHtml(cliProfile) + "</b> to get <b>" + escapeHtml(profileName)
+            + "</b>'s credentials from this app. When they expire, the AWS CLI tells you to refresh them here.</body></html>");
+        JLabel why = new JLabel("<html><body style='width: 460px; color: gray'>It's a separate profile name on purpose: "
+            + "for the same name, the AWS CLI would use the keys this app saves in ~/.aws/credentials instead.</body></html>");
+        JPanel panel = new JPanel(new BorderLayout(0, 8));
+        panel.add(intro, BorderLayout.NORTH);
+        panel.add(new JScrollPane(text), BorderLayout.CENTER);
+        panel.add(why, BorderLayout.SOUTH);
+
+        Object[] options = {"Copy", "Close"};
+        int choice = JOptionPane.showOptionDialog(this, panel, "AWS CLI Setup — " + profileName,
+            JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+        if (choice == 0) {
+            StringSelection selection = new StringSelection(snippet);
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+            statusLabel.setText("Copied the AWS CLI setup for \"" + profileName + "\" (profile " + cliProfile + ").");
+        }
     }
 
     /** App-managed profiles (in samlsts) that currently have saved credentials. */
@@ -2329,6 +2385,9 @@ public class SwingMain extends JFrame {
     }
 
     public static void main(String[] args) {
+        if (args.length > 0 && com.ourgiant.saml.core.CredentialProcess.FLAG.equals(args[0])) {
+            System.exit(com.ourgiant.saml.Launcher.runCredentialProcess(args)); // if this class is launched directly
+        }
         System.setProperty("SE_AVOID_STATS", "true");
         System.setProperty("awt.useSystemAAFontSettings", "on");
         System.setProperty("swing.aatext", "true");

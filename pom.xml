@@ -7,7 +7,7 @@
 
     <groupId>com.ourgiant</groupId>
     <artifactId>aws-idp-saml-ui</artifactId>
-    <version>1.7.9</version>
+    <version>1.7.10</version>
     <packaging>jar</packaging>
 
     <name>AWS IDP SAML UI Client</name>
@@ -185,7 +185,13 @@
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.ourgiant.saml.gui.SwingMain</mainClass>
+                                    <mainClass>com.ourgiant.saml.Launcher</mainClass>
+                                    <manifestEntries>
+                                        <!-- sqlite-jdbc loads a native library; without this, Java 24+ prints a
+                                             "restricted method" warning to stderr, which the AWS CLI shows in
+                                             credential_process errors (#222). Installers pass the same JVM option. -->
+                                        <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
+                                    </manifestEntries>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">

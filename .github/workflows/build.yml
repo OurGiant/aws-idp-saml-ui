@@ -38,7 +38,8 @@ jobs:
           jpackage \
             --input target/ \
             --main-jar aws-idp-saml-ui-all.jar \
-            --main-class com.ourgiant.saml.gui.SwingMain \
+            --main-class com.ourgiant.saml.Launcher \
+            --java-options "--enable-native-access=ALL-UNNAMED" \
             --name "AWS IDP SAML" \
             --app-version ${{ steps.version.outputs.version }} \
             --type app-image \
@@ -87,7 +88,8 @@ jobs:
           jpackage \
             --input target/ \
             --main-jar aws-idp-saml-ui-all.jar \
-            --main-class com.ourgiant.saml.gui.SwingMain \
+            --main-class com.ourgiant.saml.Launcher \
+            --java-options "--enable-native-access=ALL-UNNAMED" \
             --name aws-idp-saml \
             --app-version ${{ steps.version.outputs.version }} \
             --vendor OurGiant \
@@ -140,7 +142,8 @@ jobs:
           jpackage \
             --input target/ \
             --main-jar aws-idp-saml-ui-all.jar \
-            --main-class com.ourgiant.saml.gui.SwingMain \
+            --main-class com.ourgiant.saml.Launcher \
+            --java-options "--enable-native-access=ALL-UNNAMED" \
             --name "AWS IDP SAML" \
             --app-version ${{ steps.version.outputs.version }} \
             --vendor OurGiant \
