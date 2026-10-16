@@ -1,6 +1,7 @@
 package com.ourgiant.saml.gui;
 
 import com.ourgiant.saml.core.ConfigManager;
+import com.ourgiant.saml.core.ConsoleDestination;
 
 import org.ini4j.Profile;
 import org.slf4j.Logger;
@@ -31,6 +32,8 @@ public class ProfileEditDialog extends JDialog {
     private JComboBox<String> samlProviderCombo;
     private JTextField accountNumberField;
     private JTextField iamRoleField;
+    private JTextField regionField;
+    private JTextField consolePageField;
     private JCheckBox useDefaultDurationCheckBox;
     private JSpinner durationSpinner;
 
@@ -129,6 +132,26 @@ public class ProfileEditDialog extends JDialog {
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         panel.add(buildDurationRow(), gbc);
 
+        gbc.gridx = 0; gbc.gridy = 6; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+        JLabel regionLabel = new JLabel("Region (optional):");
+        panel.add(regionLabel, gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        regionField = new JTextField();
+        regionField.setToolTipText("e.g. eu-west-1. Used for this profile's AWS calls, its ~/.aws/config region, and "
+            + "where Open Console lands. Blank uses the global region.");
+        regionLabel.setLabelFor(regionField);
+        panel.add(regionField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 7; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+        JLabel consolePageLabel = new JLabel("Console page (optional):");
+        panel.add(consolePageLabel, gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        consolePageField = new JTextField();
+        consolePageField.setToolTipText("Where Open Console lands, e.g. https://eu-west-1.console.aws.amazon.com/ec2/home "
+            + "(must be an AWS console address). Blank opens the console home for the region.");
+        consolePageLabel.setLabelFor(consolePageField);
+        panel.add(consolePageField, gbc);
+
         add(panel, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -200,6 +223,8 @@ public class ProfileEditDialog extends JDialog {
         accountNumberField.setText(section.getOrDefault("accountnumber", ""));
         iamRoleField.setText(section.getOrDefault("iamrole", ""));
         samlProviderCombo.setSelectedItem(section.getOrDefault("samlprovider", ""));
+        regionField.setText(section.getOrDefault("awsregion", "").trim());
+        consolePageField.setText(section.getOrDefault("consoledestination", "").trim());
 
         Integer own = parseSeconds(section.get("sessionduration"));
         if (own != null) {
@@ -226,6 +251,20 @@ public class ProfileEditDialog extends JDialog {
             return;
         }
 
+        String regionText = regionField.getText().trim();
+        if (!regionText.isEmpty() && !ConsoleDestination.isValidRegion(regionText)) {
+            JOptionPane.showMessageDialog(this,
+                "\"" + regionText + "\" isn't an AWS region id (for example eu-west-1).",
+                "Invalid Region", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        String pageText = consolePageField.getText().trim();
+        String pageProblem = pageText.isEmpty() ? null : ConsoleDestination.problemWith(pageText);
+        if (pageProblem != null) {
+            JOptionPane.showMessageDialog(this, pageProblem, "Invalid Console Page", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
         boolean isRename = originalProfileName != null && !originalProfileName.equals(profileName);
         boolean isNewName = originalProfileName == null || isRename;
         if (isNewName && configManager.getAvailableProfiles().contains(profileName)) {
@@ -240,7 +279,8 @@ public class ProfileEditDialog extends JDialog {
         if (template != null) {
             // Carry over keys this dialog doesn't edit; the ones it does are set just below.
             template.forEach((key, value) -> {
-                if (!Set.of("guiname", "accountnumber", "iamrole", "samlprovider", "sessionduration").contains(key)) {
+                if (!Set.of("guiname", "accountnumber", "iamrole", "samlprovider", "sessionduration", "awsregion",
+                        "consoledestination").contains(key)) {
                     fields.put(key, value);
                 }
             });
@@ -249,11 +289,23 @@ public class ProfileEditDialog extends JDialog {
         fields.put("accountnumber", accountNumber);
         fields.put("iamrole", iamRole);
         fields.put("samlprovider", samlProvider);
-        Set<String> removeKeys = Set.of();
+        Set<String> removeKeys = new java.util.HashSet<>();
         if (useDefaultDurationCheckBox.isSelected()) {
-            removeKeys = Set.of("sessionduration");
+            removeKeys.add("sessionduration");
         } else {
             fields.put("sessionduration", String.valueOf((Integer) durationSpinner.getValue() * 60));
+        }
+        String region = regionField.getText().trim();
+        if (region.isEmpty()) {
+            removeKeys.add("awsregion");
+        } else {
+            fields.put("awsregion", region);
+        }
+        String consolePage = consolePageField.getText().trim();
+        if (consolePage.isEmpty()) {
+            removeKeys.add("consoledestination");
+        } else {
+            fields.put("consoledestination", consolePage);
         }
 
         try {
