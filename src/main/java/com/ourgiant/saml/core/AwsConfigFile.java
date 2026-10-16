@@ -1,16 +1,14 @@
 package com.ourgiant.saml.core;
 
-import com.ourgiant.saml.util.FilePermissions;
+import com.ourgiant.saml.util.AtomicFiles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -70,7 +68,7 @@ public class AwsConfigFile {
         if (updated.equals(original)) {
             return false;
         }
-        writeAtomically(target, updated, !Files.exists(target));
+        AtomicFiles.writeString(file, updated);
         logger.info("Added region {} for profile {} to {}", region, profileName, target);
         return true;
     }
@@ -128,29 +126,4 @@ public class AwsConfigFile {
         return Pattern.compile("^\\s*\\[\\s*" + body + "\\s*]\\s*(?:[#;].*)?$");
     }
 
-    private static void writeAtomically(Path target, String content, boolean isNew) throws IOException {
-        Path dir = target.toAbsolutePath().getParent();
-        Files.createDirectories(dir);
-        Path temp = Files.createTempFile(dir, ".config", ".tmp");
-        try {
-            Files.writeString(temp, content, StandardCharsets.UTF_8);
-            if (!isNew) {
-                try {
-                    Files.setPosixFilePermissions(temp, Files.getPosixFilePermissions(target));
-                } catch (UnsupportedOperationException | IOException e) {
-                    // Non-POSIX filesystem: the moved file gets default permissions, same as a fresh write.
-                }
-            }
-            try {
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } finally {
-            Files.deleteIfExists(temp);
-        }
-        if (isNew) {
-            FilePermissions.restrictToOwner(target);
-        }
-    }
 }

@@ -109,6 +109,8 @@ public class SwingMain extends JFrame {
     // What trayMenu currently shows; it's only rebuilt when this changes (see updateTrayMenu()).
     private TrayMenuEntries lastTrayMenuEntries;
     private String lastTrayTooltip;
+    // Mirrors the "Clear credentials when the app exits" setting for the shutdown hook (#224).
+    private volatile boolean clearCredentialsOnExit;
     // The GUI Name column, kept while it's hidden from the view so it can be shown again (#227).
     private javax.swing.table.TableColumn guiNameTableColumn;
     private final Map<String, Instant> lastNotifiedExpiration = new HashMap<>();
@@ -150,6 +152,10 @@ public class SwingMain extends JFrame {
         batchRefreshRunner = new BatchRefreshRunner(configManager, credentialManager, passwordManager, databaseManager);
 
         Runtime.getRuntime().addShutdownHook(new Thread(this::quitOpenConsoleDrivers, "console-driver-cleanup"));
+        clearCredentialsOnExit = databaseManager.getClearCredentialsOnExit();
+        // A shutdown hook covers every way the app can exit normally: File/tray Exit, Ctrl+Q, closing the
+        // window without a tray, and OS logout/shutdown signals (but not a crash or a force-kill).
+        Runtime.getRuntime().addShutdownHook(new Thread(this::clearCredentialsIfConfigured, "clear-credentials-on-exit"));
 
         // Set theme
         setLookAndFeel();
@@ -516,6 +522,14 @@ public class SwingMain extends JFrame {
             + "currently selected in the status table, regardless of their current status");
         refreshSelectedMenuItem.setEnabled(false); // Nothing selected yet; kept in sync by the table's selection listener.
         actionsMenu.add(refreshSelectedMenuItem);
+
+        actionsMenu.addSeparator();
+        JMenuItem clearAllMenuItem = new JMenuItem("Clear All Credentials...");
+        clearAllMenuItem.setMnemonic(KeyEvent.VK_C);
+        clearAllMenuItem.setToolTipText("Remove every profile's credentials that this app manages from ~/.aws/credentials. "
+            + "Other entries in that file are kept.");
+        clearAllMenuItem.addActionListener(e -> clearAllCredentials());
+        actionsMenu.add(clearAllMenuItem);
 
         menuBar.add(actionsMenu);
 
@@ -1778,6 +1792,7 @@ public class SwingMain extends JFrame {
     private void showConfigurationDialog() {
         ConfigurationDialog dialog = new ConfigurationDialog(this, configManager, databaseManager, passwordManager);
         dialog.setVisible(true);
+        clearCredentialsOnExit = databaseManager.getClearCredentialsOnExit();
         refreshStatusTable(); // apply settings that affect the table now, e.g. the expiry warning lead time
     }
 
@@ -1907,6 +1922,11 @@ public class SwingMain extends JFrame {
 
         menu.addSeparator();
 
+        JMenuItem clearCredentialsItem = new JMenuItem("Clear Credentials...");
+        clearCredentialsItem.setToolTipText("Remove this profile's credentials from ~/.aws/credentials, keeping the profile");
+        clearCredentialsItem.addActionListener(e -> clearCredentialsFromContextMenu(contextMenuTargetProfile));
+        menu.add(clearCredentialsItem);
+
         JMenuItem deleteItem = new JMenuItem("Delete Profile...");
         deleteItem.addActionListener(e -> deleteProfileFromContextMenu(contextMenuTargetProfile));
         menu.add(deleteItem);
@@ -1929,6 +1949,8 @@ public class SwingMain extends JFrame {
                     ? "Unpin Profile" : "Pin Profile");
                 pinItem.setEnabled(profile != null);
                 deleteItem.setEnabled(profile != null);
+                // Only profiles this app manages; credentials-only entries (e.g. hand-added keys) are left alone.
+                clearCredentialsItem.setEnabled(hasCredentials && configManager.getAvailableProfiles().contains(profile));
             }
 
             @Override
@@ -2042,6 +2064,72 @@ public class SwingMain extends JFrame {
 
     private static String escapeHtml(String s) {
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    /** App-managed profiles (in samlsts) that currently have saved credentials. */
+    private java.util.Set<String> managedProfilesWithCredentials() {
+        java.util.Set<String> result = new java.util.TreeSet<>(configManager.getAvailableProfiles());
+        result.retainAll(credentialManager.getAllProfileNames());
+        return result;
+    }
+
+    private void clearCredentialsFromContextMenu(String profileName) {
+        if (profileName == null) {
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "Remove the saved credentials for \"" + profileName + "\" from ~/.aws/credentials?\n"
+                + "The profile stays; request credentials again whenever you need them.",
+            "Clear Credentials", JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (confirm == JOptionPane.OK_OPTION) {
+            clearCredentials(java.util.Set.of(profileName));
+        }
+    }
+
+    private void clearAllCredentials() {
+        java.util.Set<String> targets = managedProfilesWithCredentials();
+        if (targets.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "None of your profiles have saved credentials.",
+                "Clear All Credentials", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(this,
+            scrollableMessage("Remove the saved credentials for these " + targets.size() + " profile(s) from ~/.aws/credentials?\n\n"
+                + String.join("\n", targets) + "\n\nThe profiles stay, and other entries in that file are kept."),
+            "Clear All Credentials", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (confirm == JOptionPane.OK_OPTION) {
+            clearCredentials(targets);
+        }
+    }
+
+    private void clearCredentials(java.util.Set<String> profiles) {
+        java.util.Set<String> removed;
+        try {
+            removed = credentialManager.clearCredentials(profiles);
+        } catch (Exception ex) {
+            logger.error("Failed to clear credentials for {}", profiles, ex);
+            JOptionPane.showMessageDialog(this, "Couldn't clear credentials: " + ex.getMessage(),
+                "Clear Credentials", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        refreshStatusTable();
+        updateCredentialButtons();
+        // After the refresh, which would otherwise replace this with "Status refreshed."
+        statusLabel.setText(removed.isEmpty() ? "No saved credentials to clear."
+            : "Cleared credentials for " + String.join(", ", removed) + ".");
+    }
+
+    /** Shutdown hook (#224): only app-managed profiles, never other entries in the credentials file. */
+    private void clearCredentialsIfConfigured() {
+        if (!clearCredentialsOnExit) {
+            return;
+        }
+        try {
+            java.util.Set<String> removed = credentialManager.clearCredentials(new java.util.HashSet<>(configManager.getAvailableProfiles()));
+            logger.info("Cleared credentials on exit for {}", removed);
+        } catch (Exception e) {
+            System.err.println("Could not clear credentials on exit: " + e);
+        }
     }
 
     private boolean hasAccountNumber(String profileName) {

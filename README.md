@@ -23,6 +23,7 @@ that touches AWS console/CLI access.
 - Export/import profiles and settings (File menu) to move to a new machine or hand a team a ready-made profile set; the file never contains credentials, passwords or encryption keys, and importing never overwrites your existing profiles, identity providers or username without asking
 - Import profiles from your identity provider: log in once (Manage Profiles → Import from IdP...), and every AWS role it grants you is listed to tick and import, with no account numbers or role names to look up
 - One-click AWS Management Console launch via the STS federation endpoint
+- Clear Credentials (right-click) and Actions → Clear All Credentials remove this app's profiles' credentials from `~/.aws/credentials` without touching anything else in that file; optionally clear them automatically when the app exits (e.g. on a shared computer)
 - Check Identity (right-click a profile): asks AWS STS who the saved credentials belong to (account, role, ARN), confirms they still work, and warns if they're for a different account than the profile expects
 - Adds each profile's region to `~/.aws/config` when it has none, so `aws --profile <name>` works right away (only ever adds a line; existing settings are left alone; can be turned off in Configuration)
 

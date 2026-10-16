@@ -39,6 +39,7 @@ public class ConfigurationDialog extends JDialog {
     private JCheckBox startMinimizedCheckBox;
     private JCheckBox showStartupTipsCheckBox;
     private JCheckBox writeRegionToAwsConfigCheckBox;
+    private JCheckBox clearCredentialsOnExitCheckBox;
     private JButton forceRefreshButton;
     private JButton saveButton;
     private JButton cancelButton;
@@ -219,7 +220,7 @@ public class ConfigurationDialog extends JDialog {
 
         gbc.gridy = 2; gbc.gridwidth = 1;
         JLabel expiryWarningLabel = new JLabel("Warn when credentials expire within:");
-        expiryWarningLabel.setDisplayedMnemonic(KeyEvent.VK_W);
+        expiryWarningLabel.setDisplayedMnemonic(KeyEvent.VK_X); // W is "Add each profile's region"
         panel.add(expiryWarningLabel, gbc);
         gbc.gridx = 1;
         expiryWarningComboBox = new JComboBox<>(DatabaseManager.EXPIRY_WARNING_CHOICES.toArray(new Integer[0]));
@@ -280,6 +281,14 @@ public class ConfigurationDialog extends JDialog {
         forceRefreshButton.addActionListener(e -> forceRefreshProfiles());
         forceRefreshButton.setToolTipText("Immediately purge stored status for profiles no longer present in the samlsts config");
         panel.add(forceRefreshButton, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 1.0; gbc.anchor = GridBagConstraints.WEST;
+        clearCredentialsOnExitCheckBox = new JCheckBox("Clear credentials when the app exits");
+        clearCredentialsOnExitCheckBox.setMnemonic(KeyEvent.VK_L);
+        clearCredentialsOnExitCheckBox.setToolTipText("On exit (including logging out or shutting down), remove this app's "
+            + "profiles' credentials from ~/.aws/credentials, e.g. on a shared computer. Other entries in that file are "
+            + "never touched. Can't run if the app crashes or is force-killed.");
+        panel.add(clearCredentialsOnExitCheckBox, gbc);
 
         return panel;
     }
@@ -370,6 +379,7 @@ public class ConfigurationDialog extends JDialog {
         showStartupTipsCheckBox.setSelected(databaseManager.getShowStartupTips());
 
         writeRegionToAwsConfigCheckBox.setSelected(databaseManager.getWriteRegionToAwsConfigEnabled());
+        clearCredentialsOnExitCheckBox.setSelected(databaseManager.getClearCredentialsOnExit());
 
         updatePasswordExpirationEnabled();
     }
@@ -412,6 +422,7 @@ public class ConfigurationDialog extends JDialog {
 
                 boolean writeRegionToAwsConfig = writeRegionToAwsConfigCheckBox.isSelected();
                 databaseManager.setWriteRegionToAwsConfigEnabled(writeRegionToAwsConfig);
+                databaseManager.setClearCredentialsOnExit(clearCredentialsOnExitCheckBox.isSelected());
 
                 logger.info("Configuration saved: session_duration = {} seconds, store_password = {}, password_expiration = {} minutes, theme = {}, browser = {}, use_fastpass = {}, tray_notifications = {}, auto_renew_pinned_profiles = {}, start_minimized_to_tray = {}, write_region_to_aws_config = {}",
                     durationSeconds, storePassword, passwordExpirationMinutes, selectedTheme, selectedBrowser, useFastPass, trayNotificationsEnabled, autoRenewPinnedProfiles, startMinimized, writeRegionToAwsConfig);

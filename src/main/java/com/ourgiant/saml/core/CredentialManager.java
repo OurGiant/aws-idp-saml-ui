@@ -194,6 +194,23 @@ public class CredentialManager {
     }
 
     /**
+     * Removes the given profiles' credentials from the credentials file and forgets their expiry
+     * (#224). Only those sections change; the rest of the file is kept as-is. Returns the profiles
+     * whose credentials were actually present.
+     */
+    public java.util.Set<String> clearCredentials(java.util.Set<String> profileNames) throws java.io.IOException {
+        java.util.Set<String> removed = CredentialsFileEditor.removeSections(Paths.get(credentialsFilePath), profileNames);
+        for (String profile : profileNames) {
+            tokenStateManager.clearExpiration(profile);
+        }
+        loadCredentials();
+        if (!removed.isEmpty()) {
+            logger.info("Cleared credentials for profile(s): {}", removed);
+        }
+        return removed;
+    }
+
+    /**
      * Get all profile names from the credentials file
      */
     public Set<String> getAllProfileNames() {
