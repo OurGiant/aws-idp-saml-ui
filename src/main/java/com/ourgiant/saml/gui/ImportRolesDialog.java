@@ -2,6 +2,7 @@ package com.ourgiant.saml.gui;
 
 import com.ourgiant.saml.core.ConfigManager;
 import com.ourgiant.saml.core.CredentialRequestError;
+import com.ourgiant.saml.core.DiscoveredRoles;
 import com.ourgiant.saml.core.RoleImportPlanner;
 import com.ourgiant.saml.core.RoleImportPlanner.Candidate;
 import com.ourgiant.saml.core.SamlAuthenticator;
@@ -46,6 +47,7 @@ public class ImportRolesDialog extends JDialog {
 
     private volatile SamlAuthenticator activeAuthenticator;
     private String discoveredProvider;
+    private Map<String, String> discoveredAliases = Map.of();
     private int importedCount;
 
     public ImportRolesDialog(Frame parent, ConfigManager configManager, Supplier<SamlAuthenticator> authenticatorFactory,
@@ -114,7 +116,7 @@ public class ImportRolesDialog extends JDialog {
         // Click a header to sort (#218). The JTable maps view rows to model rows for editing, and
         // everything else here reads the model, so sorting never changes which role a tick applies to.
         table.setAutoCreateRowSorter(true);
-        int[] widths = {60, 70, 110, 170, 190, 190, 260};
+        int[] widths = {60, 70, 110, 140, 170, 190, 190, 260};
         for (int i = 0; i < widths.length; i++) {
             table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         }
@@ -161,9 +163,9 @@ public class ImportRolesDialog extends JDialog {
         statusLabel.setText("Starting login to " + provider + "...");
         boolean showBrowser = showBrowserCheckBox.isSelected();
 
-        new SwingWorker<List<SamlRole>, Void>() {
+        new SwingWorker<DiscoveredRoles, Void>() {
             @Override
-            protected List<SamlRole> doInBackground() throws Exception {
+            protected DiscoveredRoles doInBackground() throws Exception {
                 return authenticator.discoverRoles(provider, useFastPass, showBrowser,
                     msg -> SwingUtilities.invokeLater(() -> statusLabel.setText(msg)));
             }
@@ -178,7 +180,8 @@ public class ImportRolesDialog extends JDialog {
                     return;
                 }
                 try {
-                    showRoles(provider, get());
+                    DiscoveredRoles discovered = get();
+                    showRoles(provider, discovered.roles(), discovered.accountAliases());
                 } catch (Exception ex) {
                     CredentialRequestError error = CredentialRequestError.classify(ex);
                     statusLabel.setText(error.statusMessage());
@@ -190,13 +193,19 @@ public class ImportRolesDialog extends JDialog {
     }
 
     void showRoles(String provider, List<SamlRole> roles) {
+        showRoles(provider, roles, Map.of());
+    }
+
+    /** @param aliases account number to alias, when AWS's role-selection page showed them (#244) */
+    void showRoles(String provider, List<SamlRole> roles, Map<String, String> aliases) {
         Map<String, RoleImportPlanner.ExistingProfile> existing = new LinkedHashMap<>();
         for (String profile : configManager.getAvailableProfiles()) {
             existing.put(profile, new RoleImportPlanner.ExistingProfile(
                 configManager.getAccountNumber(profile), configManager.getIamRole(profile)));
         }
-        List<Candidate> candidates = RoleImportPlanner.plan(roles, provider, existing);
+        List<Candidate> candidates = RoleImportPlanner.plan(roles, provider, existing, aliases);
         discoveredProvider = provider;
+        discoveredAliases = aliases;
         tableModel.setCandidates(candidates, provider);
 
         long importable = candidates.stream().filter(Candidate::importable).count();
@@ -264,7 +273,7 @@ public class ImportRolesDialog extends JDialog {
                 JOptionPane.showMessageDialog(this,
                     "Imported " + imported.size() + " of " + rows.size() + " profiles before failing on \""
                         + name + "\":\n" + ex.getMessage(), "Import Failed", JOptionPane.ERROR_MESSAGE);
-                showRoles(discoveredProvider, tableModel.roles());
+                showRoles(discoveredProvider, tableModel.roles(), discoveredAliases);
                 return;
             }
         }
@@ -283,8 +292,8 @@ public class ImportRolesDialog extends JDialog {
 
     private static final class RolesTableModel extends AbstractTableModel {
         // Named so a new column can't silently shift the others (see #206).
-        static final int IMPORT = 0, PRESENT = 1, ACCOUNT = 2, ROLE = 3, PROFILE_NAME = 4, GUI_NAME = 5, NOTES = 6;
-        private static final String[] COLUMNS = {"Import", "Present", "Account", "Role", "Profile Name", "GUI Name", "Notes"};
+        static final int IMPORT = 0, PRESENT = 1, ACCOUNT = 2, ALIAS = 3, ROLE = 4, PROFILE_NAME = 5, GUI_NAME = 6, NOTES = 7;
+        private static final String[] COLUMNS = {"Import", "Present", "Account", "Alias", "Role", "Profile Name", "GUI Name", "Notes"};
 
         static final class Row {
             final Candidate candidate;
@@ -369,6 +378,7 @@ public class ImportRolesDialog extends JDialog {
                 case IMPORT -> row.selected;
                 case PRESENT -> row.candidate.existingProfile() != null ? "Yes" : "No";
                 case ACCOUNT -> row.candidate.role().accountNumber();
+                case ALIAS -> row.candidate.accountAlias() != null ? row.candidate.accountAlias() : "";
                 case ROLE -> row.candidate.role().roleName();
                 case PROFILE_NAME -> row.profileName;
                 case GUI_NAME -> row.guiName;

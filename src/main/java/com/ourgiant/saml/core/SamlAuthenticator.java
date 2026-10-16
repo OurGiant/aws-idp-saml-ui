@@ -26,6 +26,8 @@ public class SamlAuthenticator {
     private final PasswordManager passwordManager;
     private final AwsConfigFile awsConfigFile;
     private volatile boolean cancelled = false;
+    // From the most recent browser login: the AWS sign-in page, for account aliases (#244).
+    private volatile String lastSignInPageSource;
 
     public SamlAuthenticator(ConfigManager configManager, CredentialManager credentialManager,
                               PasswordManager passwordManager) {
@@ -121,8 +123,8 @@ public class SamlAuthenticator {
      * importing profiles (#194). The browser is always closed afterwards, even when shown, since
      * no console sign-in follows.
      */
-    public List<SamlRole> discoverRoles(String samlProvider, boolean useOktaFastPass, boolean showBrowser,
-                                        Consumer<String> statusCallback) throws Exception {
+    public DiscoveredRoles discoverRoles(String samlProvider, boolean useOktaFastPass, boolean showBrowser,
+                                         Consumer<String> statusCallback) throws Exception {
         logger.info("Discovering roles via identity provider: {}", samlProvider);
         var providerConfig = samlProvider != null ? configManager.getProvider(samlProvider) : null;
         if (providerConfig == null) {
@@ -141,7 +143,10 @@ public class SamlAuthenticator {
         }
 
         statusCallback.accept("Reading roles from the SAML response...");
-        return new SamlParser().parseRolesFromSaml(samlResponse);
+        List<SamlRole> roles = new SamlParser().parseRolesFromSaml(samlResponse);
+        java.util.Map<String, String> aliases = AccountAliases.parse(lastSignInPageSource);
+        logger.info("Discovered {} role(s); account aliases found for {} account(s)", roles.size(), aliases.size());
+        return new DiscoveredRoles(roles, aliases);
     }
 
     /**
@@ -210,7 +215,9 @@ public class SamlAuthenticator {
         try {
             BrowserLoginHandler loginHandler = new BrowserLoginHandler(driver, useOktaFastPass, passwordManager,
                     showBrowser, accountNumber, iamRole, statusCallback, () -> cancelled);
-            return loginHandler.performLogin(loginUrl, loginTitle, username);
+            String samlResponse = loginHandler.performLogin(loginUrl, loginTitle, username);
+            lastSignInPageSource = loginHandler.getSignInPageSource();
+            return samlResponse;
         } catch (Exception e) {
             driver.quit();
             throw e;

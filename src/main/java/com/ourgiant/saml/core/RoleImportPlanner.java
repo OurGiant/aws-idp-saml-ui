@@ -29,8 +29,9 @@ public final class RoleImportPlanner {
      * @param awsProviderMismatch the assertion's AWS SAML provider name when it differs from the
      *                            chosen {@code Fed-*} section's (a profile couldn't assume the role), else null
      */
+    /** @param accountAlias the account's alias when AWS showed one (#244), else null */
     public record Candidate(SamlRole role, String existingProfile, String awsProviderMismatch,
-                            String suggestedProfileName, String suggestedGuiName) {
+                            String suggestedProfileName, String suggestedGuiName, String accountAlias) {
 
         public boolean importable() {
             return existingProfile == null && awsProviderMismatch == null;
@@ -47,6 +48,16 @@ public final class RoleImportPlanner {
      * @param existing     current profiles by name
      */
     public static List<Candidate> plan(List<SamlRole> roles, String samlProvider, Map<String, ExistingProfile> existing) {
+        return plan(roles, samlProvider, existing, Map.of());
+    }
+
+    /**
+     * @param accountAliases account number to alias (#244). When an account has one, names are based on
+     *                       it ({@code <alias>-<role>}, "Role (alias)"), which people recognize far more
+     *                       readily than a 12-digit number.
+     */
+    public static List<Candidate> plan(List<SamlRole> roles, String samlProvider, Map<String, ExistingProfile> existing,
+                                       Map<String, String> accountAliases) {
         String expectedAwsProvider = samlProvider.startsWith("Fed-") ? samlProvider.substring(4) : samlProvider;
 
         // An assertion can list the same role twice (e.g. via two IdP group mappings).
@@ -66,11 +77,13 @@ public final class RoleImportPlanner {
 
             String profileName = null;
             if (existingProfile == null && mismatch == null) {
-                profileName = uniqueName(sanitize(role.accountNumber() + "-" + role.roleName()), takenNames);
+                String accountPart = accountAliases.getOrDefault(role.accountNumber(), role.accountNumber());
+                profileName = uniqueName(sanitize(accountPart + "-" + role.roleName()), takenNames);
                 takenNames.add(profileName);
             }
+            String alias = accountAliases.get(role.accountNumber());
             candidates.add(new Candidate(role, existingProfile, mismatch, profileName,
-                role.roleName() + " (" + role.accountNumber() + ")"));
+                role.roleName() + " (" + (alias != null ? alias : role.accountNumber()) + ")", alias));
         }
         return candidates;
     }
