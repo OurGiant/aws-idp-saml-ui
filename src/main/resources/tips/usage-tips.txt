@@ -51,7 +51,7 @@ Changed your mind? Cancel
 While a login is running, the <b>Request Credentials</b> button becomes <b>Cancel</b>, and a batch refresh shows <b>Cancel Batch Refresh</b>. The browser is closed for you.
 ---
 Watch the login happen
-Tick <b>Show browser</b> before requesting credentials to see the login window, for example to complete an MFA prompt or see where a login is getting stuck. Batch refreshes always run in the background.
+Tick <b>Show browser</b> before requesting credentials to see the login window, for example to complete an MFA prompt or see where a login is getting stuck. Afterwards the browser stays signed in to the console, on the profile's <i>Open Console to</i> page. Batch refreshes always run in the background.
 ---
 Skip typing your password
 In <i>File &rarr; Configuration &rarr; Password Storage</i>, <b>Store and use Okta password</b> keeps your password encrypted on this computer for as long as you choose. <b>Forget Password</b> clears it at any time.
