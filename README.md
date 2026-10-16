@@ -18,7 +18,7 @@ that touches AWS console/CLI access.
 - Browser-driven SAML login (Selenium WebDriver, Chrome, Firefox, or Edge) against any SAML 2.0 identity provider
 - Okta FastPass support for password-less, device-based login
 - Guided first-run setup wizard with presets for Okta, Azure AD, ADFS, Ping Identity, and OneLogin
-- Manage any number of AWS profiles — add, edit, rename, and delete from the UI, backed by a standard `samlsts` INI config file
+- Manage any number of AWS profiles — add, edit, rename, duplicate, and delete from the UI, backed by a standard `samlsts` INI config file
 - Per-profile session duration: each profile can use the global default from Configuration or its own duration (Manage Profiles → Edit)
 - Export/import profiles and settings (File menu) to move to a new machine or hand a team a ready-made profile set; the file never contains credentials, passwords or encryption keys, and importing never overwrites your existing profiles, identity providers or username without asking
 - Import profiles from your identity provider: log in once (Manage Profiles → Import from IdP...), and every AWS role it grants you is listed to tick and import, with no account numbers or role names to look up
