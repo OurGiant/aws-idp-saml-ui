@@ -2,6 +2,7 @@ package com.ourgiant.saml.gui;
 
 import com.ourgiant.saml.core.ConfigManager;
 import com.ourgiant.saml.core.ConsoleDestination;
+import com.ourgiant.saml.core.ConsoleService;
 
 import org.ini4j.Profile;
 import org.slf4j.Logger;
@@ -33,7 +34,9 @@ public class ProfileEditDialog extends JDialog {
     private JTextField accountNumberField;
     private JTextField iamRoleField;
     private JTextField regionField;
-    private JTextField consolePageField;
+    private JComboBox<Object> consoleServiceCombo;
+    /** First dropdown entry: no service chosen, so Open Console shows Console Home. */
+    private static final String CONSOLE_HOME = "Console Home";
     private JCheckBox useDefaultDurationCheckBox;
     private JSpinner durationSpinner;
 
@@ -143,14 +146,18 @@ public class ProfileEditDialog extends JDialog {
         panel.add(regionField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 7; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-        JLabel consolePageLabel = new JLabel("Console page (optional):");
-        panel.add(consolePageLabel, gbc);
+        JLabel consoleServiceLabel = new JLabel("Open Console to:");
+        panel.add(consoleServiceLabel, gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        consolePageField = new JTextField();
-        consolePageField.setToolTipText("Where Open Console lands, e.g. https://eu-west-1.console.aws.amazon.com/ec2/home "
-            + "(must be an AWS console address). Blank opens the console home for the region.");
-        consolePageLabel.setLabelFor(consolePageField);
-        panel.add(consolePageField, gbc);
+        java.util.List<Object> choices = new java.util.ArrayList<>();
+        choices.add(CONSOLE_HOME);
+        choices.addAll(ConsoleService.ALL);
+        consoleServiceCombo = new JComboBox<>(choices.toArray());
+        consoleServiceCombo.setMaximumRowCount(16);
+        consoleServiceCombo.setToolTipText("The AWS console page Open Console lands on, in this profile's region if it has one. "
+            + "Type a letter to jump to a service.");
+        consoleServiceLabel.setLabelFor(consoleServiceCombo);
+        panel.add(consoleServiceCombo, gbc);
 
         add(panel, BorderLayout.CENTER);
 
@@ -224,7 +231,8 @@ public class ProfileEditDialog extends JDialog {
         iamRoleField.setText(section.getOrDefault("iamrole", ""));
         samlProviderCombo.setSelectedItem(section.getOrDefault("samlprovider", ""));
         regionField.setText(section.getOrDefault("awsregion", "").trim());
-        consolePageField.setText(section.getOrDefault("consoledestination", "").trim());
+        ConsoleService service = ConsoleService.find(section.get("consoleservice"));
+        consoleServiceCombo.setSelectedItem(service != null ? service : CONSOLE_HOME);
 
         Integer own = parseSeconds(section.get("sessionduration"));
         if (own != null) {
@@ -258,12 +266,6 @@ public class ProfileEditDialog extends JDialog {
                 "Invalid Region", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        String pageText = consolePageField.getText().trim();
-        String pageProblem = pageText.isEmpty() ? null : ConsoleDestination.problemWith(pageText);
-        if (pageProblem != null) {
-            JOptionPane.showMessageDialog(this, pageProblem, "Invalid Console Page", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
 
         boolean isRename = originalProfileName != null && !originalProfileName.equals(profileName);
         boolean isNewName = originalProfileName == null || isRename;
@@ -280,7 +282,7 @@ public class ProfileEditDialog extends JDialog {
             // Carry over keys this dialog doesn't edit; the ones it does are set just below.
             template.forEach((key, value) -> {
                 if (!Set.of("guiname", "accountnumber", "iamrole", "samlprovider", "sessionduration", "awsregion",
-                        "consoledestination").contains(key)) {
+                        "consoleservice", "consoledestination").contains(key)) {
                     fields.put(key, value);
                 }
             });
@@ -301,11 +303,12 @@ public class ProfileEditDialog extends JDialog {
         } else {
             fields.put("awsregion", region);
         }
-        String consolePage = consolePageField.getText().trim();
-        if (consolePage.isEmpty()) {
-            removeKeys.add("consoledestination");
+        // The free-form URL key from before #239 never shipped in a release; drop any leftover.
+        removeKeys.add("consoledestination");
+        if (consoleServiceCombo.getSelectedItem() instanceof ConsoleService service) {
+            fields.put("consoleservice", service.id());
         } else {
-            fields.put("consoledestination", consolePage);
+            removeKeys.add("consoleservice");
         }
 
         try {
