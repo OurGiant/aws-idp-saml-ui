@@ -107,8 +107,12 @@ public class SamlAuthenticator {
         }
 
         // Perform browser login and get SAML response
+        // With the browser shown, it ends up signed in to the console: send it to the profile's page (#247).
+        String consoleDestination = showBrowser
+                ? ConsoleDestination.resolve(configManager.getConsoleService(profileName), configManager.getExplicitAwsRegion(profileName))
+                : null;
         String samlResponse = performBrowserLogin(loginUrl, loginTitle, username, useOktaFastPass, showBrowser,
-                accountNumber, iamRole, showBrowser, statusCallback);
+                accountNumber, iamRole, showBrowser, consoleDestination, statusCallback);
 
         if (cancelled) {
             throw new CancellationException("Credential request cancelled for profile: " + profileName);
@@ -137,7 +141,7 @@ public class SamlAuthenticator {
         }
 
         String samlResponse = performBrowserLogin(loginUrl, loginTitle, configManager.getDefaultUsername(),
-                useOktaFastPass, showBrowser, null, null, false, statusCallback);
+                useOktaFastPass, showBrowser, null, null, false, null, statusCallback);
         if (cancelled) {
             throw new CancellationException("Role discovery cancelled for provider: " + samlProvider);
         }
@@ -206,7 +210,7 @@ public class SamlAuthenticator {
     private String performBrowserLogin(String loginUrl, String loginTitle, String username,
                                         boolean useOktaFastPass, boolean showBrowser,
                                         String accountNumber, String iamRole, boolean leaveBrowserOpen,
-                                        Consumer<String> statusCallback) throws Exception {
+                                        String consoleDestination, Consumer<String> statusCallback) throws Exception {
         validateSecureLoginUrl(loginUrl);
         logger.info("Starting browser login to: {}", loginUrl);
         statusCallback.accept("Launching browser...");
@@ -215,6 +219,7 @@ public class SamlAuthenticator {
         try {
             BrowserLoginHandler loginHandler = new BrowserLoginHandler(driver, useOktaFastPass, passwordManager,
                     showBrowser, accountNumber, iamRole, statusCallback, () -> cancelled);
+            loginHandler.setConsoleDestination(consoleDestination);
             String samlResponse = loginHandler.performLogin(loginUrl, loginTitle, username);
             lastSignInPageSource = loginHandler.getSignInPageSource();
             return samlResponse;

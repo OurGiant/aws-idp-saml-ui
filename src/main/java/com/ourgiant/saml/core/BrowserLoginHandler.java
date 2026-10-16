@@ -53,6 +53,9 @@ public class BrowserLoginHandler {
     private final String iamRole;
     private final Consumer<String> statusCallback;
     private final BooleanSupplier cancelled;
+    // Where to take the shown browser once signed in to the console (#247); null to leave it where AWS lands.
+    private volatile String consoleDestination;
+    static final Duration CONSOLE_LOAD_TIMEOUT = Duration.ofSeconds(30);
     // HTML of AWS's sign-in (role selection) page, kept for role discovery so account aliases can be read (#244).
     private volatile String signInPageSource;
 
@@ -614,6 +617,47 @@ public class BrowserLoginHandler {
             logger.info("Sign-in button clicked");
         } catch (NoSuchElementException e) {
             logger.info("No sign-in button found; assuming direct-link design");
+        }
+
+        openConsoleDestination(CONSOLE_LOAD_TIMEOUT);
+    }
+
+    static boolean isConsoleHost(String url) {
+        try {
+            String host = url == null ? null : java.net.URI.create(url).getHost();
+            return host != null && (host.equals("console.aws.amazon.com") || host.endsWith(".console.aws.amazon.com"));
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /** Sets the profile's "Open Console to" page for the shown browser (#247); null or Console Home leaves it alone. */
+    void setConsoleDestination(String url) {
+        this.consoleDestination = url;
+    }
+
+    /**
+     * Once the console has loaded after sign-in, takes the browser to the profile's console page.
+     * Best-effort: the credentials don't depend on it, so a slow or unexpected page just leaves the
+     * browser where AWS put it.
+     */
+    void openConsoleDestination(Duration timeout) {
+        String destination = consoleDestination;
+        if (destination == null || destination.equals(ConsoleDestination.DEFAULT)) {
+            return;
+        }
+        try {
+            // The host must be the console itself: sign-in URLs on the way often carry the console address in a
+            // query parameter (redirect_uri=https%3A%2F%2Fconsole.aws.amazon.com...), which a plain "URL contains"
+            // check would mistake for being signed in.
+            until(new WebDriverWait(driver, timeout), d -> isConsoleHost(d.getCurrentUrl()));
+            statusCallback.accept("Opening the profile's console page...");
+            driver.get(destination);
+            logger.info("Took the browser to the profile's console page: {}", destination);
+        } catch (CancellationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            logger.warn("Couldn't open the profile's console page {} in the browser; leaving it where AWS signed in", destination, e);
         }
     }
 }
