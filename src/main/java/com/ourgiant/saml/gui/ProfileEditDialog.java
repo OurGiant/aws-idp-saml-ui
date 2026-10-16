@@ -1,8 +1,8 @@
 package com.ourgiant.saml.gui;
 
 import com.ourgiant.saml.core.ConfigManager;
-import com.ourgiant.saml.core.ConsoleDestination;
 import com.ourgiant.saml.core.ConsoleService;
+import com.ourgiant.saml.core.RegionChoices;
 
 import org.ini4j.Profile;
 import org.slf4j.Logger;
@@ -33,7 +33,8 @@ public class ProfileEditDialog extends JDialog {
     private JComboBox<String> samlProviderCombo;
     private JTextField accountNumberField;
     private JTextField iamRoleField;
-    private JTextField regionField;
+    private JComboBox<Object> regionCombo;
+    private String globalDefaultRegionLabel;
     private JComboBox<Object> consoleServiceCombo;
     /** First dropdown entry: no service chosen, so Open Console shows Console Home. */
     private static final String CONSOLE_HOME = "Console Home";
@@ -136,14 +137,21 @@ public class ProfileEditDialog extends JDialog {
         panel.add(buildDurationRow(), gbc);
 
         gbc.gridx = 0; gbc.gridy = 6; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-        JLabel regionLabel = new JLabel("Region (optional):");
+        JLabel regionLabel = new JLabel("Region:");
         panel.add(regionLabel, gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        regionField = new JTextField();
-        regionField.setToolTipText("e.g. eu-west-1. Used for this profile's AWS calls, its ~/.aws/config region, and "
-            + "where Open Console lands. Blank uses the global region.");
-        regionLabel.setLabelFor(regionField);
-        panel.add(regionField, gbc);
+        // #243: a list of known regions rather than free text. First entry = no profile override.
+        String globalRegion = configManager.getExplicitAwsRegion(null);
+        globalDefaultRegionLabel = "Use global default (" + (globalRegion != null ? globalRegion : "us-east-1") + ")";
+        java.util.List<Object> regionItems = new java.util.ArrayList<>();
+        regionItems.add(globalDefaultRegionLabel);
+        regionItems.addAll(RegionChoices.ALL);
+        regionCombo = new JComboBox<>(regionItems.toArray());
+        regionCombo.setMaximumRowCount(16);
+        regionCombo.setToolTipText("Used for this profile's AWS calls, its ~/.aws/config region, and where Open Console "
+            + "lands. Type a letter to jump.");
+        regionLabel.setLabelFor(regionCombo);
+        panel.add(regionCombo, gbc);
 
         gbc.gridx = 0; gbc.gridy = 7; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
         JLabel consoleServiceLabel = new JLabel("Open Console to:");
@@ -197,6 +205,27 @@ public class ProfileEditDialog extends JDialog {
         return row;
     }
 
+    /** Selects the profile's stored region; an unlisted (e.g. hand-edited) value is kept as an extra entry. */
+    private void selectRegion(String id) {
+        if (id.isEmpty()) {
+            regionCombo.setSelectedItem(globalDefaultRegionLabel);
+            return;
+        }
+        RegionChoices.Choice listed = RegionChoices.find(id);
+        if (listed != null) {
+            regionCombo.setSelectedItem(listed);
+            return;
+        }
+        RegionChoices.Choice unlisted = new RegionChoices.Choice(id, "not in list");
+        regionCombo.addItem(unlisted);
+        regionCombo.setSelectedItem(unlisted);
+    }
+
+    /** The chosen region id, or null for the global default. */
+    private String selectedRegionId() {
+        return regionCombo.getSelectedItem() instanceof RegionChoices.Choice choice ? choice.id() : null;
+    }
+
     private static Integer parseSeconds(String value) {
         try {
             int seconds = value == null ? 0 : Integer.parseInt(value.trim());
@@ -230,7 +259,7 @@ public class ProfileEditDialog extends JDialog {
         accountNumberField.setText(section.getOrDefault("accountnumber", ""));
         iamRoleField.setText(section.getOrDefault("iamrole", ""));
         samlProviderCombo.setSelectedItem(section.getOrDefault("samlprovider", ""));
-        regionField.setText(section.getOrDefault("awsregion", "").trim());
+        selectRegion(section.getOrDefault("awsregion", "").trim());
         ConsoleService service = ConsoleService.find(section.get("consoleservice"));
         consoleServiceCombo.setSelectedItem(service != null ? service : CONSOLE_HOME);
 
@@ -259,13 +288,6 @@ public class ProfileEditDialog extends JDialog {
             return;
         }
 
-        String regionText = regionField.getText().trim();
-        if (!regionText.isEmpty() && !ConsoleDestination.isValidRegion(regionText)) {
-            JOptionPane.showMessageDialog(this,
-                "\"" + regionText + "\" isn't an AWS region id (for example eu-west-1).",
-                "Invalid Region", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
 
         boolean isRename = originalProfileName != null && !originalProfileName.equals(profileName);
         boolean isNewName = originalProfileName == null || isRename;
@@ -297,8 +319,8 @@ public class ProfileEditDialog extends JDialog {
         } else {
             fields.put("sessionduration", String.valueOf((Integer) durationSpinner.getValue() * 60));
         }
-        String region = regionField.getText().trim();
-        if (region.isEmpty()) {
+        String region = selectedRegionId();
+        if (region == null) {
             removeKeys.add("awsregion");
         } else {
             fields.put("awsregion", region);
