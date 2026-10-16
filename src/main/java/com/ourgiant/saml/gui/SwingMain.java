@@ -5,6 +5,7 @@ import com.ourgiant.saml.core.AwsConfigFile;
 import com.ourgiant.saml.core.AwsConsoleLauncher;
 import com.ourgiant.saml.core.BatchRefreshRunner;
 import com.ourgiant.saml.core.ConfigManager;
+import com.ourgiant.saml.core.ConsoleDestination;
 import com.ourgiant.saml.core.CredentialManager;
 import com.ourgiant.saml.core.CredentialRequestError;
 import com.ourgiant.saml.core.DatabaseManager;
@@ -2245,6 +2246,19 @@ public class SwingMain extends JFrame {
             return;
         }
 
+        String destination;
+        try {
+            destination = ConsoleDestination.resolve(configManager.getConsoleDestination(selectedProfile),
+                configManager.getExplicitAwsRegion(selectedProfile));
+        } catch (IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(this,
+                "This profile's console page can't be opened: " + ex.getMessage()
+                    + "\nFix it in File → Manage Profiles → Edit.",
+                "Open Console", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        logger.info("Opening AWS Console for {} at {}", selectedProfile, destination);
+
         openConsoleButton.setEnabled(false);
         openConsoleButton.setText("Opening...");
         statusLabel.setText("Opening AWS Console for profile: " + selectedProfile + "...");
@@ -2252,7 +2266,7 @@ public class SwingMain extends JFrame {
         SwingWorker<Void, Void> worker = new SwingWorker<>() {
             @Override
             protected Void doInBackground() throws Exception {
-                String loginUrl = AwsConsoleLauncher.buildLoginUrl(credentials);
+                String loginUrl = AwsConsoleLauncher.buildLoginUrl(credentials, destination);
 
                 // A fresh WebDriver per click gives this console session its own cookie jar,
                 // so it doesn't collide with sessions already open for other profiles (#169).

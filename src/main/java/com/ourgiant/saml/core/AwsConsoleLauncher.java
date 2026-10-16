@@ -19,7 +19,6 @@ import java.time.Duration;
  */
 public class AwsConsoleLauncher {
     private static final String FEDERATION_ENDPOINT = "https://signin.aws.amazon.com/federation";
-    private static final String DEFAULT_DESTINATION = "https://console.aws.amazon.com/";
 
     /**
      * Calls the AWS federation endpoint and returns a one-time console sign-in URL.
@@ -27,6 +26,11 @@ public class AwsConsoleLauncher {
      * for credentials obtained via AssumeRole* (which is how this app gets its credentials).
      */
     public static String buildLoginUrl(CredentialManager.AwsCredentials credentials) throws Exception {
+        return buildLoginUrl(credentials, ConsoleDestination.DEFAULT);
+    }
+
+    /** As {@link #buildLoginUrl(CredentialManager.AwsCredentials)}, landing on {@code destination} (see {@link ConsoleDestination}). */
+    public static String buildLoginUrl(CredentialManager.AwsCredentials credentials, String destination) throws Exception {
         String sessionJson = "{\"sessionId\":\"" + jsonEscape(credentials.getAccessKeyId())
             + "\",\"sessionKey\":\"" + jsonEscape(credentials.getSecretAccessKey())
             + "\",\"sessionToken\":\"" + jsonEscape(credentials.getSessionToken()) + "\"}";
@@ -54,7 +58,7 @@ public class AwsConsoleLauncher {
         }
 
         return FEDERATION_ENDPOINT + "?Action=login"
-            + "&Destination=" + URLEncoder.encode(DEFAULT_DESTINATION, StandardCharsets.UTF_8)
+            + "&Destination=" + URLEncoder.encode(destination, StandardCharsets.UTF_8)
             + "&SigninToken=" + URLEncoder.encode(signinToken, StandardCharsets.UTF_8);
     }
 

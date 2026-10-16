@@ -72,7 +72,7 @@ Keep it running in the background
 Closing the window doesn't quit the app; it keeps watching your credentials from the system tray. Turn on <i>Start minimized to tray</i> to skip the window at launch, and use <i>File &rarr; Exit</i> or the tray menu to quit.
 ---
 Several AWS consoles side by side
-<b>Open Console</b> opens each profile in its own browser window with its own cookies, so you can be signed in to different accounts at the same time without them interfering.
+<b>Open Console</b> opens each profile in its own browser window with its own cookies, so you can be signed in to different accounts at the same time. Give a profile a <i>Region</i> or <i>Console page</i> in <i>Manage Profiles &rarr; Edit</i> and it opens right where you work.
 ---
 Hand credentials to a script safely
 Put a <code>public_key.pem</code> in your <code>~/.aws</code> folder and the <b>Encrypted</b> button gives you the current credentials as an encrypted string that only the matching private key can read.

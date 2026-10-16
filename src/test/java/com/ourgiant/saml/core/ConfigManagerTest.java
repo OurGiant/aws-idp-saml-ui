@@ -230,6 +230,46 @@ class ConfigManagerTest {
     }
 
     @Test
+    void explicitRegionAndConsoleDestination_haveNoDefaults() throws Exception {
+        writeSamlsts("""
+                [global]
+                awsregion = eu-west-1
+
+                [inherits]
+                accountnumber = 111111111111
+
+                [own]
+                awsregion = ap-south-1
+                consoledestination = https://ap-south-1.console.aws.amazon.com/ec2/home
+
+                [blank]
+                consoledestination =
+                """);
+        configManager = new ConfigManager();
+
+        assertEquals("eu-west-1", configManager.getExplicitAwsRegion("inherits"));
+        assertEquals("ap-south-1", configManager.getExplicitAwsRegion("own"));
+        assertEquals("https://ap-south-1.console.aws.amazon.com/ec2/home", configManager.getConsoleDestination("own"));
+        assertEquals(null, configManager.getConsoleDestination("inherits"));
+        assertEquals(null, configManager.getConsoleDestination("blank"));
+    }
+
+    @Test
+    void explicitRegion_isNullWhenNothingConfigured() throws Exception {
+        writeSamlsts("""
+                [global]
+                username = x
+
+                [p]
+                accountnumber = 1
+                """);
+        configManager = new ConfigManager();
+
+        assertEquals(null, configManager.getExplicitAwsRegion("p"));
+        assertEquals("us-east-1", configManager.getAwsRegion("p"), "the STS-call region still has its fallback");
+    }
+
+    @Test
     void getAwsRegion_defaultsToUsEast1WhenUnset() throws Exception {
         writeSamlsts("""
                 [global]
