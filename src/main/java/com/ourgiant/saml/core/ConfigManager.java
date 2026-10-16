@@ -126,11 +126,11 @@ public class ConfigManager {
         return region == null || region.isBlank() ? null : region.trim();
     }
 
-    /** The profile's own Open Console landing page ({@code consoledestination}, #226), or null. */
-    public String getConsoleDestination(String profileName) {
+    /** The profile's Open Console landing service id ({@code consoleservice}, #239), or null for Console Home. */
+    public String getConsoleService(String profileName) {
         Profile.Section profile = getProfile(profileName);
-        String page = profile != null ? profile.get("consoledestination") : null;
-        return page == null || page.isBlank() ? null : page.trim();
+        String service = profile != null ? profile.get("consoleservice") : null;
+        return service == null || service.isBlank() ? null : service.trim();
     }
 
     /**

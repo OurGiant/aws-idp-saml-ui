@@ -2302,17 +2302,9 @@ public class SwingMain extends JFrame {
             return;
         }
 
-        String destination;
-        try {
-            destination = ConsoleDestination.resolve(configManager.getConsoleDestination(selectedProfile),
-                configManager.getExplicitAwsRegion(selectedProfile));
-        } catch (IllegalArgumentException ex) {
-            JOptionPane.showMessageDialog(this,
-                "This profile's console page can't be opened: " + ex.getMessage()
-                    + "\nFix it in File → Manage Profiles → Edit.",
-                "Open Console", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
+        // Only ever a known AWS console page (a hand-edited unknown service falls back to Console Home).
+        String destination = ConsoleDestination.resolve(configManager.getConsoleService(selectedProfile),
+            configManager.getExplicitAwsRegion(selectedProfile));
         logger.info("Opening AWS Console for {} at {}", selectedProfile, destination);
 
         openConsoleButton.setEnabled(false);

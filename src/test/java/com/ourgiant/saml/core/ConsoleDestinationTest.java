@@ -2,59 +2,67 @@ package com.ourgiant.saml.core;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConsoleDestinationTest {
 
     @Test
-    void consolePageWinsOverRegion() {
-        assertEquals("https://eu-west-1.console.aws.amazon.com/ec2/home?region=eu-west-1#Instances:",
-            ConsoleDestination.resolve(" https://eu-west-1.console.aws.amazon.com/ec2/home?region=eu-west-1#Instances: ", "us-west-2"));
+    void serviceInTheProfilesRegion() {
+        assertEquals("https://eu-west-1.console.aws.amazon.com/ec2/home?region=eu-west-1",
+            ConsoleDestination.resolve("ec2", "eu-west-1"));
+        assertEquals("https://us-east-1.console.aws.amazon.com/codesuite/codepipeline/home?region=us-east-1",
+            ConsoleDestination.resolve("codepipeline", " us-east-1 "));
     }
 
     @Test
-    void regionGivesThatRegionsConsoleHome() {
+    void serviceWithoutRegionUsesTheRegionlessPage() {
+        assertEquals("https://console.aws.amazon.com/lambda/home", ConsoleDestination.resolve("lambda", null));
+    }
+
+    @Test
+    void noServiceGivesConsoleHome_inTheRegionWhenSet() {
         assertEquals("https://eu-west-1.console.aws.amazon.com/console/home?region=eu-west-1",
             ConsoleDestination.resolve(null, "eu-west-1"));
-        assertEquals(ConsoleDestination.DEFAULT, ConsoleDestination.resolve("", "us-gov-west-1"),
-            "GovCloud regions have no console on console.aws.amazon.com");
-        assertEquals(ConsoleDestination.DEFAULT, ConsoleDestination.resolve(null, "cn-north-1"));
-    }
-
-    @Test
-    void noSettingsOrInvalidRegionKeepsTheDefault() {
         assertEquals(ConsoleDestination.DEFAULT, ConsoleDestination.resolve(null, null));
-        assertEquals(ConsoleDestination.DEFAULT, ConsoleDestination.resolve("  ", "not a region"));
+        assertEquals(ConsoleDestination.DEFAULT, ConsoleDestination.resolve("", "not a region"));
     }
 
     @Test
-    void acceptsCommercialConsoleHosts() {
-        assertNull(ConsoleDestination.problemWith("https://console.aws.amazon.com/cloudwatch/home"));
-        assertNull(ConsoleDestination.problemWith("https://us-east-1.console.aws.amazon.com/s3/buckets"));
-        assertNull(ConsoleDestination.problemWith("HTTPS://Console.AWS.Amazon.com/"));
+    void unknownHandEditedServiceFallsBackToConsoleHome() {
+        assertEquals(ConsoleDestination.DEFAULT, ConsoleDestination.resolve("https://evil.example.com/", null));
+        assertEquals("https://eu-west-1.console.aws.amazon.com/console/home?region=eu-west-1",
+            ConsoleDestination.resolve("nosuchservice", "eu-west-1"));
     }
 
     @Test
-    void rejectsAnythingThatIsNotAnAwsConsolePage() {
-        assertTrue(ConsoleDestination.problemWith("http://console.aws.amazon.com/").contains("https://"));
-        assertTrue(ConsoleDestination.problemWith("https://evil.example.com/console.aws.amazon.com").contains("not \"evil.example.com\""));
-        assertTrue(ConsoleDestination.problemWith("https://console.aws.amazon.com.evil.example/").contains("AWS console address"));
-        assertTrue(ConsoleDestination.problemWith("https://notconsole.aws.amazon.com/").contains("AWS console address"));
-        assertTrue(ConsoleDestination.problemWith("https://user:pw@console.aws.amazon.com/").contains("user name"));
-        assertTrue(ConsoleDestination.problemWith("https://console.aws.amazon.com:8443/").contains("port"));
-        assertTrue(ConsoleDestination.problemWith("javascript:alert(1)").contains("https://"));
-        assertTrue(ConsoleDestination.problemWith("https://console.amazonaws-us-gov.com/").contains("GovCloud"));
-        assertTrue(ConsoleDestination.problemWith("https://console.amazonaws.cn/").contains("China"));
-        assertTrue(ConsoleDestination.problemWith("not a url with spaces").contains("isn't a valid URL"));
+    void govCloudAndChinaRegionsUseTheRegionlessCommercialPage() {
+        assertEquals(ConsoleDestination.DEFAULT, ConsoleDestination.resolve(null, "us-gov-west-1"));
+        assertEquals("https://console.aws.amazon.com/s3/home", ConsoleDestination.resolve("s3", "cn-north-1"));
     }
 
     @Test
-    void resolveRefusesABadConsolePage() {
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-            () -> ConsoleDestination.resolve("https://evil.example.com/", "eu-west-1"));
-        assertTrue(e.getMessage().contains("AWS console address"));
+    void catalogIsWellFormed() {
+        List<ConsoleService> all = ConsoleService.ALL;
+        assertTrue(all.size() >= 25 && all.size() <= 50, "25–50 services, got " + all.size());
+        Set<String> ids = new HashSet<>();
+        Set<String> labels = new HashSet<>();
+        for (ConsoleService service : all) {
+            assertTrue(ids.add(service.id()), "duplicate id " + service.id());
+            assertTrue(labels.add(service.label()), "duplicate label " + service.label());
+            assertTrue(service.id().matches("[a-z0-9]+"), "id " + service.id());
+            assertTrue(service.path().matches("[a-z0-9-]+(/[a-z0-9-]+)*"), "path " + service.path());
+            assertEquals(service, ConsoleService.find(service.id()));
+        }
+        for (int i = 1; i < all.size(); i++) {
+            assertTrue(all.get(i - 1).label().compareToIgnoreCase(all.get(i).label()) < 0, "alphabetical");
+        }
+        assertNull(ConsoleService.find(null));
+        assertNull(ConsoleService.find(" "));
     }
 }

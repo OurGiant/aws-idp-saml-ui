@@ -230,7 +230,7 @@ class ConfigManagerTest {
     }
 
     @Test
-    void explicitRegionAndConsoleDestination_haveNoDefaults() throws Exception {
+    void explicitRegionAndConsoleService_haveNoDefaults() throws Exception {
         writeSamlsts("""
                 [global]
                 awsregion = eu-west-1
@@ -240,18 +240,18 @@ class ConfigManagerTest {
 
                 [own]
                 awsregion = ap-south-1
-                consoledestination = https://ap-south-1.console.aws.amazon.com/ec2/home
+                consoleservice = ec2
 
                 [blank]
-                consoledestination =
+                consoleservice =
                 """);
         configManager = new ConfigManager();
 
         assertEquals("eu-west-1", configManager.getExplicitAwsRegion("inherits"));
         assertEquals("ap-south-1", configManager.getExplicitAwsRegion("own"));
-        assertEquals("https://ap-south-1.console.aws.amazon.com/ec2/home", configManager.getConsoleDestination("own"));
-        assertEquals(null, configManager.getConsoleDestination("inherits"));
-        assertEquals(null, configManager.getConsoleDestination("blank"));
+        assertEquals("ec2", configManager.getConsoleService("own"));
+        assertEquals(null, configManager.getConsoleService("inherits"));
+        assertEquals(null, configManager.getConsoleService("blank"));
     }
 
     @Test
