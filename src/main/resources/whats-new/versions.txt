@@ -1,3 +1,4 @@
 # Versions with bundled "What's New" notes (whats-new/<version>.html), one per line.
 # Add the new version here when writing its notes as part of cutting a release.
 1.7.0
+1.8.0
