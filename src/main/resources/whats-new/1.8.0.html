@@ -1,0 +1,32 @@
+<h2>Version 1.8.0</h2>
+
+<h3>Use your credentials everywhere</h3>
+<ul>
+  <li><b>AWS CLI, SDKs and Terraform can get credentials from the app.</b> Right-click a profile and choose <i>Copy AWS CLI Setup...</i>, then paste the two lines into <code>~/.aws/config</code>. Tools then fetch the profile's current credentials on demand, and tell you to refresh them here when they expire.</li>
+  <li><b>Check Identity.</b> Right-click a profile to ask AWS who its credentials belong to: the account, role and full ARN, with a warning if they're for a different account than the profile expects.</li>
+  <li><b>Open Console where you work.</b> In <i>Manage Profiles &rarr; Edit</i>, give a profile a region and choose a service under <i>Open Console to</i> (EC2, S3, CloudWatch and more) and it opens right there.</li>
+</ul>
+
+<h3>Manage profiles faster</h3>
+<ul>
+  <li><b>Duplicate a profile</b> in Manage Profiles to add a sibling role in the same account in seconds.</li>
+  <li><b>Session duration per profile.</b> Each profile can use the global default or its own duration.</li>
+  <li><b>Import from IdP</b> now shows which roles are already <b>Present</b>, and every column can be sorted.</li>
+  <li><b>GUI Name column.</b> Right-click a column header in the status table to show each profile's friendly name. The filter box matches GUI names too.</li>
+</ul>
+
+<h3>Stay ahead of expiry</h3>
+<ul>
+  <li><b>Countdowns on the tray icon.</b> Hover it to see how long your pinned profiles have left, e.g. <i>dev: 42m left · prod: expired</i>.</li>
+  <li><b>Choose your warning time.</b> Under <i>Warn when credentials expire within</i> in Configuration, pick 5, 10, 15 or 30 minutes. It sets when profiles turn amber, when you're notified, and when auto-renew kicks in.</li>
+</ul>
+
+<h3>Shared computers</h3>
+<ul>
+  <li><b>Clear credentials.</b> Right-click a profile to remove its credentials without deleting the profile, or use <i>Actions &rarr; Clear All Credentials</i>. Turn on <i>Clear credentials when the app exits</i> in Configuration to do it automatically. Entries you added to <code>~/.aws/credentials</code> yourself are never touched.</li>
+</ul>
+
+<h3>Fixes</h3>
+<ul>
+  <li>After dragging a column header to reorder the status table, clicking a row, Refresh Selected and drag-to-pin now act on the right profile.</li>
+</ul>
