@@ -331,6 +331,28 @@ public class ConfigManager {
         return using;
     }
 
+    /**
+     * Saves the global sign-in username and default region (#254) in one write. Profiles that set
+     * their own {@code username}/{@code awsregion} keep them.
+     *
+     * @param username non-blank; it's typed into the identity provider's login page
+     * @param region   a region id such as {@code us-east-1}, or null/blank to remove the default
+     *                 (us-east-1 is then used for AWS calls)
+     */
+    public void saveGlobalSettings(String username, String region) throws Exception {
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("Username is required.");
+        }
+        Profile.Section global = globalSection();
+        global.put("username", username.trim());
+        if (region == null || region.isBlank()) {
+            global.remove("awsregion");
+        } else {
+            global.put("awsregion", region.trim());
+        }
+        persistConfig();
+    }
+
     /** {@code [global] samlprovider}: the provider new profiles default to, or null if unset. */
     public String getDefaultProvider() {
         Profile.Section global = getGlobalConfig();

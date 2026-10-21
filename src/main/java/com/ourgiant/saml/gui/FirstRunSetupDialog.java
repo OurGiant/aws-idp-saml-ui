@@ -2,6 +2,7 @@ package com.ourgiant.saml.gui;
 
 import com.ourgiant.saml.core.ConfigManager;
 import com.ourgiant.saml.core.IdpPresets;
+import com.ourgiant.saml.core.RegionChoices;
 import com.ourgiant.saml.core.SamlAuthenticator;
 
 import org.slf4j.Logger;
@@ -22,15 +23,10 @@ public class FirstRunSetupDialog extends JDialog {
 
     private static final String[] BROWSERS = {"chrome", "firefox", "edge"};
 
-    private static final String[] AWS_REGIONS = {
-        "us-east-1", "us-east-2", "us-west-1", "us-west-2",
-        "us-gov-east-1", "us-gov-west-1"
-    };
-
     // Global fields
     private JComboBox<String> browserCombo;
     private JTextField usernameField;
-    private JComboBox<String> regionCombo;
+    private JComboBox<RegionChoices.Choice> regionCombo;
     private JSpinner sessionDurationSpinner;
 
     // IDP fields
@@ -114,7 +110,9 @@ public class FirstRunSetupDialog extends JDialog {
         gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
         panel.add(new JLabel("AWS Region:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        regionCombo = new JComboBox<>(AWS_REGIONS);
+        regionCombo = new JComboBox<>(RegionChoices.ALL.toArray(new RegionChoices.Choice[0]));
+        regionCombo.setMaximumRowCount(16);
+        regionCombo.setSelectedItem(RegionChoices.find("us-east-1"));
         panel.add(regionCombo, gbc);
 
         gbc.gridx = 0; gbc.gridy = 3; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
@@ -232,7 +230,7 @@ public class FirstRunSetupDialog extends JDialog {
         Map<String, String> global = new LinkedHashMap<>();
         global.put("browser", (String) browserCombo.getSelectedItem());
         global.put("username", username);
-        global.put("awsregion", (String) regionCombo.getSelectedItem());
+        global.put("awsregion", ((RegionChoices.Choice) regionCombo.getSelectedItem()).id());
         global.put("sessionduration", String.valueOf(sessionSeconds));
         global.put("samlprovider", sectionName);
         sections.put("global", global);
