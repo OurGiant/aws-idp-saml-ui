@@ -57,6 +57,7 @@ public class ImportRolesDialog extends JDialog {
         this.authenticatorFactory = authenticatorFactory;
         this.useFastPass = useFastPass;
         this.providerCombo = new JComboBox<>(configManager.getIdpProviders().toArray(new String[0]));
+        providerCombo.setRenderer(new ProviderNameRenderer());
         if (configManager.getDefaultProvider() != null) {
             providerCombo.setSelectedItem(configManager.getDefaultProvider());
         }
@@ -168,7 +169,7 @@ public class ImportRolesDialog extends JDialog {
         SamlAuthenticator authenticator = authenticatorFactory.get();
         activeAuthenticator = authenticator;
         setLoginInProgress(true);
-        statusLabel.setText("Starting login to " + provider + "...");
+        statusLabel.setText("Starting login to " + ConfigManager.awsProviderName(provider) + "...");
         boolean showBrowser = showBrowserCheckBox.isSelected();
 
         new SwingWorker<DiscoveredRoles, Void>() {
@@ -322,14 +323,15 @@ public class ImportRolesDialog extends JDialog {
 
         void setCandidates(List<Candidate> candidates, String provider) {
             rows.clear();
-            String expected = provider.startsWith("Fed-") ? provider.substring(4) : provider;
+            String expected = ConfigManager.awsProviderName(provider);
             for (Candidate candidate : candidates) {
                 String notes = "";
                 if (candidate.existingProfile() != null) {
                     notes = "Already configured as \"" + candidate.existingProfile() + "\"";
                 } else if (candidate.awsProviderMismatch() != null) {
                     notes = "AWS SAML provider is \"" + candidate.awsProviderMismatch() + "\", not \"" + expected
-                        + "\" — add a Fed-" + candidate.awsProviderMismatch() + " provider to use this role";
+                        + "\" — add an identity provider named \"" + candidate.awsProviderMismatch()
+                        + "\" (File → Identity Providers) to use this role";
                 }
                 rows.add(new Row(candidate, notes));
             }

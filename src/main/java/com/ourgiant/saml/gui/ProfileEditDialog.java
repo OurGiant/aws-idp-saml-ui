@@ -116,6 +116,7 @@ public class ProfileEditDialog extends JDialog {
         panel.add(new JLabel("Identity Provider:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         samlProviderCombo = new JComboBox<>(configManager.getIdpProviders().toArray(new String[0]));
+        samlProviderCombo.setRenderer(new ProviderNameRenderer());
         samlProviderCombo.setToolTipText("Which configured identity provider handles login for this profile");
         panel.add(samlProviderCombo, gbc);
 
@@ -260,7 +261,10 @@ public class ProfileEditDialog extends JDialog {
         guiNameField.setText(asCopy && !guiName.isBlank() ? guiName + " (copy)" : guiName);
         accountNumberField.setText(section.getOrDefault("accountnumber", ""));
         iamRoleField.setText(section.getOrDefault("iamrole", ""));
-        samlProviderCombo.setSelectedItem(section.getOrDefault("samlprovider", ""));
+        // A profile without its own samlprovider inherits the default; show that one, not the
+        // dropdown's first entry, so saving doesn't quietly move the profile to another provider.
+        String provider = section.getOrDefault("samlprovider", "").trim();
+        samlProviderCombo.setSelectedItem(provider.isEmpty() ? configManager.getDefaultProvider() : provider);
         selectRegion(section.getOrDefault("awsregion", "").trim());
         ConsoleService service = ConsoleService.find(section.get("consoleservice"));
         consoleServiceCombo.setSelectedItem(service != null ? service : CONSOLE_HOME);
