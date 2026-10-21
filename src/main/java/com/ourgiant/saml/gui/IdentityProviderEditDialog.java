@@ -49,6 +49,14 @@ public class IdentityProviderEditDialog extends JDialog {
         setLocationRelativeTo(parent);
     }
 
+    @Override
+    public void setVisible(boolean visible) {
+        if (!visible) {
+            form.cancelDetection();
+        }
+        super.setVisible(visible);
+    }
+
     /** The section saved, e.g. {@code Fed-Okta}; null if the dialog was cancelled. */
     public String getSavedSection() {
         return savedSection;
@@ -72,6 +80,12 @@ public class IdentityProviderEditDialog extends JDialog {
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         JButton cancelButton = new JButton("Cancel");
         cancelButton.addActionListener(e -> setVisible(false));
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                form.cancelDetection();
+            }
+        });
         JButton saveButton = new JButton("Save");
         saveButton.setMnemonic(KeyEvent.VK_S);
         saveButton.addActionListener(e -> onSave());

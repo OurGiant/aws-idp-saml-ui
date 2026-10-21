@@ -2,6 +2,7 @@ package com.ourgiant.saml.gui;
 
 import com.ourgiant.saml.core.ConfigManager;
 import com.ourgiant.saml.core.IdpPresets;
+import com.ourgiant.saml.core.LoginTitleDetector;
 import com.ourgiant.saml.core.SamlAuthenticator;
 
 import org.ini4j.Profile;
@@ -14,7 +15,10 @@ import java.awt.event.KeyEvent;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * The identity provider fields (#249): provider type preset, AWS provider name with a live ARN
@@ -34,6 +38,12 @@ public class IdentityProviderForm extends JPanel {
     private final JTextField loginPageField = new JTextField(36);
     private final JLabel loginPageCheck = new JLabel(" ");
     private final JTextField loginTitleField = new JTextField(28);
+    private final JButton detectButton = new JButton("Detect...");
+    private final JLabel detectStatus = new JLabel(" ");
+    private Supplier<String> browserType;
+    private BooleanSupplier showBrowser = () -> false;
+    private volatile boolean detecting;
+    private volatile boolean detectCancelled;
     private final JLabel renameWarning = new JLabel();
     private Consumer<String> onSectionChange = s -> { };
     private Runnable onResize = () -> { };
@@ -43,6 +53,7 @@ public class IdentityProviderForm extends JPanel {
     public IdentityProviderForm(ConfigManager configManager, String originalSection) {
         super(new GridBagLayout());
         this.configManager = configManager;
+        this.browserType = configManager::getBrowserType;
         setOriginalSection(originalSection);
         initializeUI();
         if (originalSection == null) {
@@ -76,6 +87,89 @@ public class IdentityProviderForm extends JPanel {
         return originalSection;
     }
 
+    /** Which browser Detect uses; defaults to the app's browser setting (the wizard passes its own choice). */
+    public void setBrowserType(Supplier<String> browserType) {
+        this.browserType = browserType;
+    }
+
+    /** Whether Detect shows the browser window; headless by default. */
+    public void setShowBrowser(BooleanSupplier showBrowser) {
+        this.showBrowser = showBrowser;
+    }
+
+    /** True while Detect is running. */
+    public boolean isDetecting() {
+        return detecting;
+    }
+
+    /** Stops a running Detect; call when the window holding the form closes. */
+    public void cancelDetection() {
+        if (detecting) {
+            detectCancelled = true;
+            showDetectStatus("Cancelling...");
+        }
+    }
+
+    private void showDetectStatus(String text) {
+        detectStatus.setText(text);
+        if (!detectStatus.isVisible()) {
+            detectStatus.setVisible(true);
+            onResize.run();
+        }
+    }
+
+    /** Opens the login URL and fills in the settled page title (#260). */
+    private void detectTitle() {
+        String url = loginPageField.getText().trim();
+        String problem = urlProblem(url);
+        if (problem != null) {
+            JOptionPane.showMessageDialog(this, problem, "Login Page URL", JOptionPane.WARNING_MESSAGE);
+            loginPageField.requestFocusInWindow();
+            return;
+        }
+        String browser = browserType.get();
+        boolean visible = showBrowser.getAsBoolean();
+        detecting = true;
+        detectCancelled = false;
+        detectButton.setText("Cancel");
+        detectStatus.setForeground(UIManager.getColor("Label.foreground"));
+        showDetectStatus("Opening the login page in " + browser + "...");
+
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return LoginTitleDetector.detect(browser, url, visible, () -> detectCancelled);
+            }
+
+            @Override
+            protected void done() {
+                detecting = false;
+                detectButton.setText("Detect...");
+                try {
+                    String title = get();
+                    loginTitleField.setText(title);
+                    showDetectStatus("✓ Detected from the login page");
+                } catch (CancellationException e) {
+                    showDetectStatus("Detection cancelled.");
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    if (cause instanceof CancellationException) {
+                        showDetectStatus("Detection cancelled.");
+                        return;
+                    }
+                    String message = cause.getMessage() == null ? cause.toString() : cause.getMessage().lines().findFirst().orElse("");
+                    detectStatus.setForeground(errorColor());
+                    showDetectStatus("Couldn't detect the title.");
+                    if (isShowing()) {
+                        JOptionPane.showMessageDialog(IdentityProviderForm.this,
+                            "Couldn't detect the login page title:\n" + message, "Detect Login Page Title",
+                            JOptionPane.WARNING_MESSAGE);
+                    }
+                }
+            }
+        }.execute();
+    }
+
     public JTextField nameField() {
         return nameField;
     }
@@ -97,7 +191,24 @@ public class IdentityProviderForm extends JPanel {
         addHelp(loginPageCheck);
 
         loginTitleField.setToolTipText("The browser page title that shows the login page has loaded");
-        addRow(new JLabel("Login page title:"), KeyEvent.VK_L, loginTitleField);
+        detectButton.setToolTipText("Open the login page URL in the browser and fill in its title");
+        detectButton.addActionListener(e -> {
+            if (detecting) {
+                cancelDetection();
+            } else {
+                detectTitle();
+            }
+        });
+        JPanel titleRow = new JPanel(new BorderLayout(6, 0));
+        titleRow.setOpaque(false);
+        titleRow.add(loginTitleField, BorderLayout.CENTER);
+        titleRow.add(detectButton, BorderLayout.EAST);
+        JLabel titleLabel = new JLabel("Login page title:");
+        addRow(titleLabel, KeyEvent.VK_L, titleRow);
+        titleLabel.setLabelFor(loginTitleField);
+        detectStatus.setFont(detectStatus.getFont().deriveFont(detectStatus.getFont().getSize2D() - 1f));
+        addHelp(detectStatus);
+        detectStatus.setVisible(false); // shown once Detect has something to say
 
         renameWarning.setVisible(false);
         renameWarning.setBorder(BorderFactory.createCompoundBorder(
