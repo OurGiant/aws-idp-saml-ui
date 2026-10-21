@@ -302,7 +302,7 @@ public class ImportRolesDialog extends JDialog {
      * most {@link #MAX_LISTED_PROFILES} names and summarising any beyond that as "…and N more" so a large import
      * doesn't stretch the dialog without limit.
      */
-    private static String buildImportedMessage(List<String> imported) {
+    static String buildImportedMessage(List<String> imported) {
         int total = imported.size();
         StringBuilder message = new StringBuilder("Imported ").append(total)
             .append(total == 1 ? " profile:" : " profiles:");
