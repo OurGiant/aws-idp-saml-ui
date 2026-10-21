@@ -4,6 +4,7 @@ import com.ourgiant.saml.ThemeManager;
 import com.ourgiant.saml.core.ConfigManager;
 import com.ourgiant.saml.core.DatabaseManager;
 import com.ourgiant.saml.core.PasswordManager;
+import com.ourgiant.saml.core.RegionChoices;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +28,8 @@ public class ConfigurationDialog extends JDialog {
     private final DatabaseManager databaseManager;
     private final PasswordManager passwordManager;
     private JSpinner durationSpinner;
+    private JComboBox<Object> regionComboBox;
+    private JTextField usernameField;
     private JCheckBox storePasswordCheckBox;
     private JButton forgetPasswordButton;
     private JSpinner passwordExpirationSpinner;
@@ -110,7 +113,44 @@ public class ConfigurationDialog extends JDialog {
             + "A profile can override this in Manage Profiles → Edit.");
         panel.add(durationSpinner, gbc);
 
+        // #254: [global] awsregion was only settable during first-run setup.
+        gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+        JLabel regionLabel = new JLabel("Default region:");
+        regionLabel.setDisplayedMnemonic(KeyEvent.VK_D);
+        panel.add(regionLabel, gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        java.util.List<Object> regionItems = new java.util.ArrayList<>();
+        regionItems.add(NO_DEFAULT_REGION);
+        regionItems.addAll(RegionChoices.ALL);
+        regionComboBox = new JComboBox<>(regionItems.toArray());
+        regionComboBox.setMaximumRowCount(16);
+        regionComboBox.setToolTipText("The region for profiles that don't choose their own in Manage Profiles → Edit: "
+            + "used for their AWS calls, ~/.aws/config region and where Open Console lands. Type a letter to jump.");
+        regionLabel.setLabelFor(regionComboBox);
+        panel.add(regionComboBox, gbc);
+
         return panel;
+    }
+
+    /** First region entry: no global default saved, so us-east-1 is used. */
+    private static final String NO_DEFAULT_REGION = "Not set (us-east-1)";
+
+    /** Selects the stored default region; an unlisted (e.g. hand-edited) value is kept as an extra entry. */
+    private void selectRegion(String id) {
+        if (id == null) {
+            regionComboBox.setSelectedItem(NO_DEFAULT_REGION);
+            return;
+        }
+        RegionChoices.Choice listed = RegionChoices.find(id);
+        if (listed == null) {
+            listed = new RegionChoices.Choice(id, "not in list");
+            regionComboBox.addItem(listed);
+        }
+        regionComboBox.setSelectedItem(listed);
+    }
+
+    private String selectedRegionId() {
+        return regionComboBox.getSelectedItem() instanceof RegionChoices.Choice choice ? choice.id() : null;
     }
 
     private JPanel buildPasswordSection() {
@@ -185,7 +225,20 @@ public class ConfigurationDialog extends JDialog {
         JPanel panel = titledPanel("Authentication");
         GridBagConstraints gbc = sectionGbc();
 
-        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
+        // #254: [global] username was only settable during first-run setup.
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel usernameLabel = new JLabel("Username:");
+        usernameLabel.setDisplayedMnemonic(KeyEvent.VK_N);
+        panel.add(usernameLabel, gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        usernameField = new JTextField(24);
+        usernameField.setToolTipText("The username entered on your identity provider's login page. "
+            + "A profile can set its own in ~/.aws/samlsts.");
+        usernameLabel.setLabelFor(usernameField);
+        panel.add(usernameField, gbc);
+        gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+
+        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2;
         useFastPassCheckBox = new JCheckBox("Use Okta FastPass");
         useFastPassCheckBox.setMnemonic(KeyEvent.VK_U);
         useFastPassCheckBox.setToolTipText("Attempt Okta FastPass (device-based) login before falling back to password entry");
@@ -366,6 +419,10 @@ public class ConfigurationDialog extends JDialog {
 
         browserComboBox.setSelectedItem(configManager.getBrowserType());
 
+        String username = configManager.getDefaultUsername();
+        usernameField.setText(username != null ? username : "");
+        selectRegion(configManager.getExplicitAwsRegion(null));
+
         useFastPassCheckBox.setSelected(databaseManager.getFastPassEnabled());
 
         trayNotificationsCheckBox.setSelected(databaseManager.getTrayNotificationsEnabled());
@@ -387,7 +444,23 @@ public class ConfigurationDialog extends JDialog {
     private class SaveActionListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
+            String username = usernameField.getText().trim();
+            if (username.isEmpty()) {
+                JOptionPane.showMessageDialog(ConfigurationDialog.this,
+                    "Enter the username you sign in to your identity provider with.",
+                    "Username Required",
+                    JOptionPane.WARNING_MESSAGE);
+                usernameField.requestFocusInWindow();
+                return;
+            }
             try {
+                String region = selectedRegionId();
+                // Only rewrite samlsts when these actually changed.
+                if (!username.equals(configManager.getDefaultUsername())
+                        || !java.util.Objects.equals(region, configManager.getExplicitAwsRegion(null))) {
+                    configManager.saveGlobalSettings(username, region);
+                }
+
                 int durationMinutes = (Integer) durationSpinner.getValue();
                 int durationSeconds = durationMinutes * 60;
                 databaseManager.setSessionDuration(durationSeconds);

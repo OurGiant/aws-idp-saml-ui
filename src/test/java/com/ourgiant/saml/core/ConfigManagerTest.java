@@ -282,4 +282,63 @@ class ConfigManagerTest {
 
         assertEquals("us-east-1", configManager.getAwsRegion("my-profile"));
     }
+
+    @Test
+    void saveGlobalSettings_setsUsernameAndRegion_profileOverridesKept() throws Exception {
+        writeSamlsts("""
+                [global]
+                username = old
+                awsregion = us-east-1
+
+                [inherits]
+                accountnumber = 1
+
+                [own]
+                accountnumber = 2
+                username = someone-else
+                awsregion = eu-west-1
+                """);
+        configManager = new ConfigManager();
+
+        configManager.saveGlobalSettings("  jdoe@acme.com ", "us-west-2");
+
+        assertEquals("jdoe@acme.com", configManager.getDefaultUsername());
+        assertEquals("us-west-2", configManager.getExplicitAwsRegion("inherits"));
+        assertEquals("someone-else", configManager.getUsername("own"));
+        assertEquals("eu-west-1", configManager.getExplicitAwsRegion("own"));
+        String written = readSamlsts();
+        assertTrue(written.contains("username = jdoe@acme.com"));
+        assertTrue(written.contains("awsregion = us-west-2"));
+    }
+
+    @Test
+    void saveGlobalSettings_blankRegionRemovesDefault() throws Exception {
+        writeSamlsts("""
+                [global]
+                username = jdoe
+                awsregion = us-west-2
+                """);
+        configManager = new ConfigManager();
+
+        configManager.saveGlobalSettings("jdoe", null);
+
+        assertEquals(null, configManager.getExplicitAwsRegion(null));
+        assertFalse(readSamlsts().contains("awsregion"));
+    }
+
+    @Test
+    void saveGlobalSettings_requiresUsername_andCreatesGlobalIfMissing() throws Exception {
+        writeSamlsts("""
+                [p]
+                accountnumber = 1
+                """);
+        configManager = new ConfigManager();
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> configManager.saveGlobalSettings(" ", "us-east-1"));
+
+        configManager.saveGlobalSettings("jdoe", "ap-south-1");
+        assertEquals("jdoe", configManager.getDefaultUsername());
+        assertTrue(readSamlsts().contains("[global]"));
+    }
 }
