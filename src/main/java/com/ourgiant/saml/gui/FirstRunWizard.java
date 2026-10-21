@@ -102,6 +102,7 @@ public class FirstRunWizard extends JDialog {
 
             @Override
             public void windowClosed(WindowEvent e) {
+                providerForm.cancelDetection();
                 databaseManager.close();
             }
         });
@@ -230,6 +231,8 @@ public class FirstRunWizard extends JDialog {
         providerForm.addRow(new JLabel("Username:"), KeyEvent.VK_E, usernameField);
         browserCombo.setToolTipText("Browser used to drive the sign-in");
         providerForm.addRow(new JLabel("Browser:"), KeyEvent.VK_W, browserCombo);
+        providerForm.setBrowserType(() -> (String) browserCombo.getSelectedItem());
+        providerForm.setShowBrowser(showBrowserCheckBox::isSelected);
         providerForm.setOnResize(() -> {
             if (isShowing()) {
                 pack();
@@ -244,7 +247,7 @@ public class FirstRunWizard extends JDialog {
         testButton.setToolTipText("Save these details and sign in once to check them. The AWS roles found are "
             + "offered in the next step, so you won't have to sign in again.");
         testButton.addActionListener(e -> testSignIn());
-        showBrowserCheckBox.setToolTipText("Show the browser window during sign-in, e.g. to complete an MFA prompt");
+        showBrowserCheckBox.setToolTipText("Show the browser window for Test Sign-in and Detect, e.g. to complete an MFA prompt");
         cancelTestButton.addActionListener(e -> cancelTest());
         cancelTestButton.setVisible(false);
         testProgress.setIndeterminate(true);
