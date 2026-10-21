@@ -107,8 +107,7 @@ provider and your first AWS profile, and writes the result to `~/.aws/samlsts`.
 - **Show browser**: show the login browser window (e.g. to complete an MFA prompt) instead of running it in the background; Okta FastPass is turned on in Configuration
 - **Request Credentials**: run the SAML login flow and obtain temporary AWS credentials
 - **Open Console**: launch the AWS Management Console in your browser using the current profile's credentials
-- **Credential Status table**: shows every known profile with its status, expiration time, and time remaining; filter by profile name and/or status, right-click a row for quick actions (request/show credentials, open console, copy account number, pin, delete)
-  With no profiles yet, this area instead shows what to do next: add an identity provider, or import or add profiles
+- **Credential Status table**: shows every known profile with its status, expiration time, and time remaining; filter by profile name and/or status, right-click a row for quick actions (request/show credentials, open console, copy account number, pin, delete). With no profiles yet, this area instead shows what to do next: add an identity provider, or import or add profiles
 - **Configuration**: session duration, default region, sign-in username, password storage, theme, browser, notifications, startup behavior, and a Force Refresh action to immediately clean up stale profiles
 - **View Logs** (Help menu): a live, auto-refreshing view of the application log and the startup log, with a button to open the log folder
 
