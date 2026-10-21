@@ -37,6 +37,11 @@ public class ConfigManager {
 
         if (loadImmediately) {
             loadConfig();
+        } else {
+            // Empty until createConfig() writes the file, so lookups (e.g. the first-run wizard
+            // checking a provider name) see "nothing configured" rather than failing.
+            config = new Ini();
+            disableValueEscaping(config);
         }
     }
 

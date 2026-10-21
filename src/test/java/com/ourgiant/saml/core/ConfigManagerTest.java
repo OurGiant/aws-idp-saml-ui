@@ -341,4 +341,22 @@ class ConfigManagerTest {
         assertEquals("jdoe", configManager.getDefaultUsername());
         assertTrue(readSamlsts().contains("[global]"));
     }
+
+    @Test
+    void notYetLoaded_behavesAsEmptyUntilCreateConfig() throws Exception {
+        configManager = new ConfigManager(false);
+
+        assertTrue(configManager.getIdpProviders().isEmpty());
+        assertTrue(configManager.getAvailableProfiles().isEmpty());
+        assertEquals(null, configManager.validateProviderName("Okta", null));
+        assertEquals(null, configManager.getDefaultProvider());
+
+        Map<String, Map<String, String>> sections = new LinkedHashMap<>();
+        sections.put("global", new LinkedHashMap<>(Map.of("username", "jdoe")));
+        configManager.createConfig(sections);
+        configManager.saveProvider(null, "Okta", Map.of("loginpage", "https://acme.okta.com/x", "logintitle", "Okta"));
+
+        assertEquals(java.util.List.of("Fed-Okta"), configManager.getIdpProviders());
+        assertTrue(readSamlsts().contains("username = jdoe"));
+    }
 }
