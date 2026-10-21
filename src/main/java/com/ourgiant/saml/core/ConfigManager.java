@@ -278,6 +278,167 @@ public class ConfigManager {
         return idps;
     }
 
+    /** The samlsts section prefix for identity providers. */
+    public static final String PROVIDER_PREFIX = "Fed-";
+
+    /** Characters IAM allows in a SAML provider name, which is also the part after {@code Fed-}. */
+    private static final java.util.regex.Pattern PROVIDER_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9._-]{1,128}");
+
+    /** {@code Okta} → {@code Fed-Okta}. */
+    public static String providerSection(String awsProviderName) {
+        return PROVIDER_PREFIX + awsProviderName;
+    }
+
+    /** {@code Fed-Okta} → {@code Okta}: the IAM SAML provider name used in the principal ARN. */
+    public static String awsProviderName(String providerSection) {
+        return providerSection.startsWith(PROVIDER_PREFIX) ? providerSection.substring(PROVIDER_PREFIX.length()) : providerSection;
+    }
+
+    /**
+     * Why {@code name} can't be used as an identity provider's AWS provider name, or null if it can.
+     * {@code currentSection} is the provider being edited (null when adding), so keeping its own name is fine.
+     */
+    public String validateProviderName(String name, String currentSection) {
+        if (name == null || name.isBlank()) {
+            return "Enter the AWS provider name.";
+        }
+        if (name.regionMatches(true, 0, PROVIDER_PREFIX, 0, PROVIDER_PREFIX.length())) {
+            return "Leave out the \"" + PROVIDER_PREFIX + "\" prefix; it's added for you.";
+        }
+        if (!PROVIDER_NAME.matcher(name).matches()) {
+            return "The AWS provider name can only contain letters, numbers, '.', '_' and '-' (up to 128 characters).";
+        }
+        String section = providerSection(name);
+        for (String existing : getIdpProviders()) {
+            if (existing.equalsIgnoreCase(section) && !existing.equalsIgnoreCase(String.valueOf(currentSection))) {
+                return "An identity provider named \"" + name + "\" already exists.";
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Profiles that sign in through {@code providerSection}, either by setting it themselves or by
+     * inheriting {@code [global] samlprovider}. Sorted like {@link #getAvailableProfiles()}.
+     */
+    public List<String> getProfilesUsingProvider(String providerSection) {
+        List<String> using = new ArrayList<>();
+        for (String profile : getAvailableProfiles()) {
+            if (providerSection.equals(getSamlProvider(profile))) {
+                using.add(profile);
+            }
+        }
+        return using;
+    }
+
+    /** {@code [global] samlprovider}: the provider new profiles default to, or null if unset. */
+    public String getDefaultProvider() {
+        Profile.Section global = getGlobalConfig();
+        String value = global != null ? global.get("samlprovider") : null;
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    /**
+     * Sets {@code [global] samlprovider}. Profiles without their own {@code samlprovider} inherit it,
+     * so those are pinned to their current provider first and changing the default never moves them.
+     */
+    public void setDefaultProvider(String providerSection) throws Exception {
+        String previous = getDefaultProvider();
+        if (previous != null && !previous.equals(providerSection)) {
+            pinInheritingProfiles(previous);
+        }
+        globalSection().put("samlprovider", providerSection);
+        persistConfig();
+    }
+
+    /**
+     * Creates or updates the identity provider section {@code Fed-<awsProviderName>}, setting
+     * {@code fields} and leaving any other keys in it alone. When {@code originalSection} names a
+     * different section, the provider is renamed: its keys move to the new section, and every
+     * profile (and {@code [global]}) that pointed at the old name is updated, in a single write.
+     *
+     * @param originalSection the section being edited, or null to add a new provider
+     */
+    public void saveProvider(String originalSection, String awsProviderName, Map<String, String> fields) throws Exception {
+        String section = providerSection(awsProviderName);
+        Map<String, String> merged = new java.util.LinkedHashMap<>();
+        if (originalSection != null && config.get(originalSection) != null) {
+            Profile.Section old = config.get(originalSection);
+            for (String key : old.keySet()) {
+                merged.put(key, old.get(key));
+            }
+        }
+        merged.putAll(fields);
+
+        boolean rename = originalSection != null && !originalSection.equals(section);
+        if (rename) {
+            for (String profile : getAvailableProfiles()) {
+                Profile.Section profileSection = config.get(profile);
+                if (originalSection.equals(profileSection.get("samlprovider"))) {
+                    profileSection.put("samlprovider", section);
+                }
+            }
+            Profile.Section global = getGlobalConfig();
+            if (global != null && originalSection.equals(global.get("samlprovider"))) {
+                global.put("samlprovider", section);
+            }
+            config.remove(originalSection);
+        }
+
+        Profile.Section target = config.get(section);
+        if (target == null) {
+            target = config.add(section);
+        }
+        merged.forEach(target::put);
+        persistConfig();
+    }
+
+    /**
+     * Removes an identity provider in a single write. Profiles that used it are moved to
+     * {@code reassignTo}, or deleted (with their token state) when it's null. If it was the
+     * default provider, {@code reassignTo} becomes the default, or the default is cleared.
+     */
+    public void deleteProvider(String providerSection, String reassignTo) throws Exception {
+        List<String> using = getProfilesUsingProvider(providerSection);
+        boolean wasDefault = providerSection.equals(getDefaultProvider());
+        for (String profile : using) {
+            if (reassignTo != null) {
+                config.get(profile).put("samlprovider", reassignTo);
+            } else {
+                config.remove(profile);
+            }
+        }
+        if (wasDefault) {
+            if (reassignTo != null) {
+                globalSection().put("samlprovider", reassignTo);
+            } else {
+                getGlobalConfig().remove("samlprovider");
+            }
+        }
+        config.remove(providerSection);
+        persistConfig();
+        if (reassignTo == null) {
+            for (String profile : using) {
+                databaseManager.deleteProfileState(profile);
+            }
+        }
+    }
+
+    /** Gives every profile that inherits {@code [global] samlprovider} its own copy of {@code provider}. */
+    private void pinInheritingProfiles(String provider) {
+        for (String profile : getAvailableProfiles()) {
+            Profile.Section profileSection = config.get(profile);
+            if (profileSection.get("samlprovider") == null) {
+                profileSection.put("samlprovider", provider);
+            }
+        }
+    }
+
+    private Profile.Section globalSection() {
+        Profile.Section global = getGlobalConfig();
+        return global != null ? global : config.add("global");
+    }
+
     /**
      * Creates or updates a profile section with the given fields and persists to disk.
      */

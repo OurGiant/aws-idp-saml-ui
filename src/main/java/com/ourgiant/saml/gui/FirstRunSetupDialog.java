@@ -1,6 +1,7 @@
 package com.ourgiant.saml.gui;
 
 import com.ourgiant.saml.core.ConfigManager;
+import com.ourgiant.saml.core.IdpPresets;
 import com.ourgiant.saml.core.SamlAuthenticator;
 
 import org.slf4j.Logger;
@@ -26,17 +27,6 @@ public class FirstRunSetupDialog extends JDialog {
         "us-gov-east-1", "us-gov-west-1"
     };
 
-    private record IdpPreset(String sectionSuffix, String loginPage, String loginTitle) {}
-
-    private static final Map<String, IdpPreset> IDP_PRESETS = new LinkedHashMap<>();
-    static {
-        IDP_PRESETS.put("Okta",         new IdpPreset("Okta",     "https://your-org.okta.com/app/amazon_aws/your-app-id/sso/saml", "Okta"));
-        IDP_PRESETS.put("Azure AD",     new IdpPreset("AzureAD",  "https://login.microsoftonline.com/your-tenant-id/saml2",         "Sign in to your account"));
-        IDP_PRESETS.put("ADFS",         new IdpPreset("ADFS",     "https://your-adfs-server/adfs/ls/IdpInitiatedSignOn.aspx",        "Sign In"));
-        IDP_PRESETS.put("Ping Identity",new IdpPreset("Ping",     "https://your-ping-server/idp/startSSO.ping",                      "Sign On"));
-        IDP_PRESETS.put("OneLogin",     new IdpPreset("OneLogin", "https://your-subdomain.onelogin.com/trust/saml2/http-post/sso/your-app-id", "OneLogin"));
-    }
-
     // Global fields
     private JComboBox<String> browserCombo;
     private JTextField usernameField;
@@ -44,7 +34,7 @@ public class FirstRunSetupDialog extends JDialog {
     private JSpinner sessionDurationSpinner;
 
     // IDP fields
-    private JComboBox<String> idpTypeCombo;
+    private JComboBox<IdpPresets.Preset> idpTypeCombo;
     private JTextField idpNameField;
     private JTextField loginPageField;
     private JTextField loginTitleField;
@@ -144,7 +134,7 @@ public class FirstRunSetupDialog extends JDialog {
         gbc.gridx = 0; gbc.gridy = 0;
         panel.add(new JLabel("IDP Type:"), gbc);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        idpTypeCombo = new JComboBox<>(IDP_PRESETS.keySet().toArray(new String[0]));
+        idpTypeCombo = new JComboBox<>(IdpPresets.ALL.toArray(new IdpPresets.Preset[0]));
         idpTypeCombo.addActionListener(e -> applyIdpPreset());
         idpTypeCombo.setToolTipText("Prefills the fields below with a starting point for this identity provider");
         panel.add(idpTypeCombo, gbc);
@@ -199,10 +189,9 @@ public class FirstRunSetupDialog extends JDialog {
     }
 
     private void applyIdpPreset() {
-        String selected = (String) idpTypeCombo.getSelectedItem();
-        IdpPreset preset = IDP_PRESETS.get(selected);
+        IdpPresets.Preset preset = (IdpPresets.Preset) idpTypeCombo.getSelectedItem();
         if (preset == null) return;
-        idpNameField.setText(preset.sectionSuffix());
+        idpNameField.setText(preset.suggestedName());
         loginPageField.setText(preset.loginPage());
         loginTitleField.setText(preset.loginTitle());
     }

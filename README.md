@@ -19,6 +19,7 @@ that touches AWS console/CLI access.
 - Okta FastPass support for password-less, device-based login
 - Guided first-run setup wizard with presets for Okta, Azure AD, ADFS, Ping Identity, and OneLogin
 - Manage any number of AWS profiles — add, edit, rename, duplicate, and delete from the UI, backed by a standard `samlsts` INI config file
+- Manage identity providers from the UI (File → Identity Providers…): add, edit, rename, duplicate and delete them, and choose the default for new profiles. Renaming updates every profile that uses the provider, and deleting one moves its profiles to another provider (or deletes them) instead of leaving them broken
 - Per-profile session duration: each profile can use the global default from Configuration or its own duration (Manage Profiles → Edit)
 - Export/import profiles and settings (File menu) to move to a new machine or hand a team a ready-made profile set; the file never contains credentials, passwords or encryption keys, and importing never overwrites your existing profiles, identity providers or username without asking
 - Import profiles from your identity provider: log in once (Manage Profiles → Import from IdP...), and every AWS role it grants you is listed to tick and import, with no account numbers or role names to look up
@@ -122,7 +123,7 @@ Logs are written to `~/.aws-idp-saml-ui/logs/`:
 Profiles and identity provider settings live in `~/.aws/samlsts`, a standard
 INI file (`[global]` section for defaults, one section per profile, one
 `Fed-*` section per identity provider). It's normally managed entirely through
-the UI — the Profile Manager and Configuration dialogs — but can also be
+the UI — the Profile Manager, Identity Providers and Configuration dialogs — but can also be
 hand-edited; the app picks up profile changes on its next status refresh.
 
 Application settings (session duration, theme, stored password, last-used

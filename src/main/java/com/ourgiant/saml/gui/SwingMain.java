@@ -477,6 +477,12 @@ public class SwingMain extends JFrame {
         manageProfilesMenuItem.addActionListener(e -> showProfileManagerDialog());
         fileMenu.add(manageProfilesMenuItem);
 
+        JMenuItem identityProvidersMenuItem = new JMenuItem("Identity Providers...");
+        identityProvidersMenuItem.setMnemonic(KeyEvent.VK_D);
+        identityProvidersMenuItem.setToolTipText("Add, edit or delete the identity providers profiles sign in through");
+        identityProvidersMenuItem.addActionListener(e -> showIdentityProvidersDialog());
+        fileMenu.add(identityProvidersMenuItem);
+
         JMenuItem configMenuItem = new JMenuItem("Configuration...");
         configMenuItem.setMnemonic(KeyEvent.VK_C);
         configMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_COMMA, InputEvent.CTRL_DOWN_MASK));
@@ -1797,12 +1803,25 @@ public class SwingMain extends JFrame {
         refreshStatusTable(); // apply settings that affect the table now, e.g. the expiry warning lead time
     }
 
-    private void showProfileManagerDialog() {
-        ProfileManagerDialog dialog = new ProfileManagerDialog(this, configManager, () -> new ImportRolesDialog(this, configManager,
+    private ImportRolesDialog newImportRolesDialog() {
+        return new ImportRolesDialog(this, configManager,
             () -> new SamlAuthenticator(configManager, credentialManager, passwordManager),
-            databaseManager.getFastPassEnabled(), showBrowserCheckBox.isSelected()));
+            databaseManager.getFastPassEnabled(), showBrowserCheckBox.isSelected());
+    }
+
+    private void showProfileManagerDialog() {
+        ProfileManagerDialog dialog = new ProfileManagerDialog(this, configManager, this::newImportRolesDialog);
         dialog.setVisible(true);
         if (dialog.isProfilesChanged()) {
+            loadProfiles();
+            refreshStatusTable();
+        }
+    }
+
+    private void showIdentityProvidersDialog() {
+        IdentityProvidersDialog dialog = new IdentityProvidersDialog(this, configManager, this::newImportRolesDialog);
+        dialog.setVisible(true);
+        if (dialog.isChanged()) {
             loadProfiles();
             refreshStatusTable();
         }
