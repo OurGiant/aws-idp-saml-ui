@@ -31,6 +31,9 @@ import java.util.function.Supplier;
 public class ImportRolesDialog extends JDialog {
     private static final Logger logger = LoggerFactory.getLogger(ImportRolesDialog.class);
 
+    /** At most this many profile names are listed individually in the "Profiles Imported" popup; the rest are summarised. */
+    private static final int MAX_LISTED_PROFILES = 15;
+
     private final ConfigManager configManager;
     private final Supplier<SamlAuthenticator> authenticatorFactory;
     private final boolean useFastPass;
@@ -289,9 +292,28 @@ public class ImportRolesDialog extends JDialog {
         importedCount = imported.size();
         logger.info("Imported {} profile(s) via {}: {}", imported.size(), discoveredProvider, imported);
         JOptionPane.showMessageDialog(this,
-            "Imported " + imported.size() + (imported.size() == 1 ? " profile" : " profiles") + ":\n" + String.join(", ", imported),
+            buildImportedMessage(imported),
             "Profiles Imported", JOptionPane.INFORMATION_MESSAGE);
         dispose();
+    }
+
+    /**
+     * Builds the body of the "Profiles Imported" popup: a header line, then one profile name per line, listing at
+     * most {@link #MAX_LISTED_PROFILES} names and summarising any beyond that as "…and N more" so a large import
+     * doesn't stretch the dialog without limit.
+     */
+    static String buildImportedMessage(List<String> imported) {
+        int total = imported.size();
+        StringBuilder message = new StringBuilder("Imported ").append(total)
+            .append(total == 1 ? " profile:" : " profiles:");
+        int listed = Math.min(total, MAX_LISTED_PROFILES);
+        for (int i = 0; i < listed; i++) {
+            message.append('\n').append(imported.get(i));
+        }
+        if (total > MAX_LISTED_PROFILES) {
+            message.append("\n…and ").append(total - MAX_LISTED_PROFILES).append(" more");
+        }
+        return message.toString();
     }
 
     private void close() {
