@@ -96,14 +96,14 @@ public class SamlAuthenticator {
         // Get provider configuration
         var providerConfig = configManager.getProvider(samlProvider);
         if (providerConfig == null) {
-            throw new IllegalArgumentException("SAML provider not found: " + samlProvider);
+            throw new IllegalArgumentException(providerNotFound(samlProvider));
         }
 
         String loginUrl = providerConfig.get("loginpage");
         String loginTitle = providerConfig.get("logintitle");
 
         if (loginUrl == null || loginTitle == null) {
-            throw new IllegalArgumentException("Incomplete provider configuration for: " + samlProvider);
+            throw new IllegalArgumentException(providerIncomplete(samlProvider));
         }
 
         // Perform browser login and get SAML response
@@ -132,12 +132,12 @@ public class SamlAuthenticator {
         logger.info("Discovering roles via identity provider: {}", samlProvider);
         var providerConfig = samlProvider != null ? configManager.getProvider(samlProvider) : null;
         if (providerConfig == null) {
-            throw new IllegalArgumentException("SAML provider not found: " + samlProvider);
+            throw new IllegalArgumentException(providerNotFound(samlProvider));
         }
         String loginUrl = providerConfig.get("loginpage");
         String loginTitle = providerConfig.get("logintitle");
         if (loginUrl == null || loginTitle == null) {
-            throw new IllegalArgumentException("Incomplete provider configuration for: " + samlProvider);
+            throw new IllegalArgumentException(providerIncomplete(samlProvider));
         }
 
         String samlResponse = performBrowserLogin(loginUrl, loginTitle, configManager.getDefaultUsername(),
@@ -239,6 +239,18 @@ public class SamlAuthenticator {
     private WebDriver createWebDriver(boolean showBrowser, String loginUrl, boolean useOktaFastPass) {
         return WebDriverFactory.createWebDriver(configManager.getBrowserType(), showBrowser, loginUrl,
                 useOktaFastPass);
+    }
+
+    static String providerNotFound(String samlProvider) {
+        return samlProvider == null
+            ? "No identity provider is chosen for this. Pick one in File → Identity Providers or Manage Profiles → Edit."
+            : "Identity provider \"" + ConfigManager.awsProviderName(samlProvider) + "\" isn't set up. Add it in "
+                + "File → Identity Providers, or choose another one in Manage Profiles → Edit.";
+    }
+
+    static String providerIncomplete(String samlProvider) {
+        return "Identity provider \"" + ConfigManager.awsProviderName(samlProvider) + "\" is missing its login page URL "
+            + "or title. Fix it in File → Identity Providers.";
     }
 
     public static void validateSecureLoginUrl(String loginUrl) {

@@ -104,14 +104,19 @@ public class ProfileImportDialog extends JDialog {
         updateImportButton();
     }
 
+    /** {@code Fed-CorpOkta, Fed-Azure} → {@code CorpOkta, Azure} (#259). */
+    private static String displayNames(java.util.Collection<String> providerSections) {
+        return String.join(", ", providerSections.stream().map(ConfigManager::awsProviderName).toList());
+    }
+
     private JComponent buildNotes() {
         ProfileBundleImporter.Preview preview = ProfileBundleImporter.preview(bundle, configManager.getAllSections());
         List<String> notes = new ArrayList<>();
         if (!preview.providersToAdd().isEmpty()) {
-            notes.add("Identity providers to add: " + String.join(", ", preview.providersToAdd()));
+            notes.add("Identity providers to add: " + displayNames(preview.providersToAdd()));
         }
         if (!preview.providersKeptDifferent().isEmpty()) {
-            notes.add("Kept your existing " + String.join(", ", preview.providersKeptDifferent())
+            notes.add("Kept your existing " + displayNames(preview.providersKeptDifferent())
                 + " (the file's version differs; existing identity providers are never overwritten)");
         }
         if (!preview.globalKeysToAdd().isEmpty()) {
@@ -241,7 +246,8 @@ public class ProfileImportDialog extends JDialog {
                 case 1 -> row.source;
                 case 2 -> row.fields.getOrDefault("accountnumber", "");
                 case 3 -> row.fields.getOrDefault("iamrole", "");
-                case 4 -> row.fields.getOrDefault("samlprovider", "(global)");
+                case 4 -> row.fields.containsKey("samlprovider")
+                    ? ConfigManager.awsProviderName(row.fields.get("samlprovider")) : "(default)";
                 case 5 -> row.target;
                 default -> status(row);
             };
