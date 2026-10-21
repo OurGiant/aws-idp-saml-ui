@@ -2561,7 +2561,7 @@ public class SwingMain extends JFrame {
                     boolean firstRun = !ConfigManager.configFileExists();
                     if (firstRun) {
                         DatabaseManager.deleteIfExists();
-                        FirstRunSetupDialog setup = new FirstRunSetupDialog();
+                        FirstRunWizard setup = new FirstRunWizard();
                         setup.setVisible(true);
                         if (!setup.isSetupCompleted()) {
                             startupLog.cancelled("first-run setup was not completed");

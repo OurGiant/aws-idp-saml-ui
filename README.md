@@ -17,7 +17,7 @@ that touches AWS console/CLI access.
 **Authentication & profiles**
 - Browser-driven SAML login (Selenium WebDriver, Chrome, Firefox, or Edge) against any SAML 2.0 identity provider
 - Okta FastPass support for password-less, device-based login
-- Guided first-run setup wizard with presets for Okta, Azure AD, ADFS, Ping Identity, and OneLogin
+- Guided first-run setup wizard: start from scratch (with presets for Okta, Azure AD, ADFS, Ping Identity and OneLogin) or from a profile file your team exported, optionally test the sign-in, then import your AWS accounts from your identity provider, add one by hand, or skip and add them later
 - Manage any number of AWS profiles — add, edit, rename, duplicate, and delete from the UI, backed by a standard `samlsts` INI config file
 - Manage identity providers from the UI (File → Identity Providers…): add, edit, rename, duplicate and delete them, and choose the default for new profiles. Renaming updates every profile that uses the provider, and deleting one moves its profiles to another provider (or deletes them) instead of leaving them broken
 - Per-profile session duration: each profile can use the global default from Configuration or its own duration (Manage Profiles → Edit)
@@ -98,8 +98,9 @@ Run the application:
 java -jar target/aws-idp-saml-ui-all.jar
 ```
 
-On first launch, a setup wizard walks you through configuring your identity
-provider and your first AWS profile, and writes the result to `~/.aws/samlsts`.
+On first launch, a setup wizard walks you through connecting to your identity
+provider (or importing a profile file from your team), then optionally adding
+your AWS accounts, and writes the result to `~/.aws/samlsts`.
 
 ### Main Interface
 
