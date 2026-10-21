@@ -335,9 +335,14 @@ public class SwingMain extends JFrame {
             filterPanel.add(statusCheckBox);
         }
         tokenStatusPanel.add(filterPanel, BorderLayout.NORTH);
+        statusFilterPanel = filterPanel;
 
+        // #253: the table and a "what to do next" panel share this spot; updateEmptyState() picks one.
         JScrollPane tableScrollPane = new JScrollPane(tokenStatusTable);
-        tokenStatusPanel.add(tableScrollPane, BorderLayout.CENTER);
+        statusCards = new JPanel(new CardLayout());
+        statusCards.add(tableScrollPane, STATUS_CARD_TABLE);
+        statusCards.add(buildEmptyStatePanel(), STATUS_CARD_EMPTY);
+        tokenStatusPanel.add(statusCards, BorderLayout.CENTER);
 
         JPanel statusControls = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton refreshStatusButton = new JButton("Refresh Status");
@@ -392,6 +397,136 @@ public class SwingMain extends JFrame {
         setLocationRelativeTo(null);
         restoreWindowBounds();
         trackWindowBounds();
+    }
+
+    private static final String STATUS_CARD_TABLE = "table";
+    private static final String STATUS_CARD_EMPTY = "empty";
+    private JPanel statusCards;
+    private JPanel statusFilterPanel;
+    private JLabel emptyStateTitle;
+    private JLabel emptyStateMessage;
+    private JButton emptyImportFromIdpButton;
+    private JButton emptyAddProfileButton;
+    private JButton emptyProvidersButton;
+    private boolean showingEmptyState;
+
+    /**
+     * Shown instead of the status table when samlsts has no profiles (#253), with buttons for the
+     * next step: add an identity provider if there are none, otherwise add or import profiles.
+     */
+    private JPanel buildEmptyStatePanel() {
+        JPanel panel = new JPanel(new GridBagLayout()) {
+            @Override
+            public void updateUI() {
+                super.updateUI();
+                // Re-read the theme's border color when the theme changes.
+                Color line = UIManager.getColor("Component.borderColor");
+                setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createEmptyBorder(8, 8, 8, 8),
+                    BorderFactory.createDashedBorder(line != null ? line : Color.GRAY, 4, 3)));
+            }
+        };
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.insets = new Insets(4, 16, 4, 16);
+
+        emptyStateTitle = new JLabel();
+        emptyStateTitle.putClientProperty("FlatLaf.styleClass", "h3");
+        gbc.gridy = 0;
+        panel.add(emptyStateTitle, gbc);
+
+        emptyStateMessage = new JLabel();
+        emptyStateMessage.setHorizontalAlignment(SwingConstants.CENTER);
+        gbc.gridy = 1;
+        panel.add(emptyStateMessage, gbc);
+
+        emptyImportFromIdpButton = new JButton("Import from Identity Provider...");
+        emptyImportFromIdpButton.setToolTipText("Log in once and choose from every AWS role your identity provider grants you");
+        emptyImportFromIdpButton.addActionListener(e -> importFromIdentityProvider());
+        emptyAddProfileButton = new JButton("Add Profile...");
+        emptyAddProfileButton.setToolTipText("Enter an account number and IAM role name");
+        emptyAddProfileButton.addActionListener(e -> addProfileFromEmptyState());
+        emptyProvidersButton = new JButton("Identity Providers...");
+        emptyProvidersButton.setToolTipText("Add the identity provider you sign in to AWS through");
+        emptyProvidersButton.addActionListener(e -> showIdentityProvidersDialog());
+        JButton importFileButton = new JButton("Import Profile File...");
+        importFileButton.setToolTipText("Add profiles from a file exported with File → Export Profiles");
+        importFileButton.addActionListener(e -> importProfiles());
+        for (JButton primary : new JButton[]{emptyImportFromIdpButton, emptyProvidersButton}) {
+            // Styled like a dialog's default button, without making Enter trigger it.
+            primary.putClientProperty("FlatLaf.style", "background: $Button.default.background; "
+                + "foreground: $Button.default.foreground; borderColor: $Button.default.borderColor");
+        }
+
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
+        buttons.setOpaque(false);
+        buttons.add(emptyProvidersButton);
+        buttons.add(emptyImportFromIdpButton);
+        buttons.add(emptyAddProfileButton);
+        buttons.add(importFileButton);
+        gbc.gridy = 2;
+        gbc.insets = new Insets(14, 16, 4, 16);
+        panel.add(buttons, gbc);
+        return panel;
+    }
+
+    /**
+     * Shows the status table, or the empty-state panel when there are no profiles (#253), and
+     * enables Request Credentials only when there's a profile to request credentials for.
+     */
+    private void updateEmptyState() {
+        if (statusCards == null) {
+            return;
+        }
+        boolean hasProfiles = !configManager.getAvailableProfiles().isEmpty();
+        if (!hasProfiles) {
+            List<String> providers = configManager.getIdpProviders();
+            boolean hasProviders = !providers.isEmpty();
+            if (hasProviders) {
+                String provider = configManager.getDefaultProvider();
+                if (provider == null || !providers.contains(provider)) {
+                    provider = providers.get(0);
+                }
+                emptyStateTitle.setText("No AWS accounts yet");
+                emptyStateMessage.setText("<html><div style='text-align:center'>Add the AWS accounts you sign in to through "
+                    + escapeHtml(ConfigManager.awsProviderName(provider))
+                    + " to request credentials and open the console.</div></html>");
+            } else {
+                emptyStateTitle.setText("Add an identity provider to get started");
+                emptyStateMessage.setText("<html><div style='text-align:center'>Profiles sign in through your company's "
+                    + "identity provider (Okta, Azure AD, ADFS and others).<br>Add yours, or import a profile file "
+                    + "from your team.</div></html>");
+            }
+            emptyProvidersButton.setVisible(!hasProviders);
+            emptyImportFromIdpButton.setVisible(hasProviders);
+            emptyAddProfileButton.setVisible(hasProviders);
+        }
+        if (showingEmptyState != !hasProfiles) {
+            showingEmptyState = !hasProfiles;
+            ((CardLayout) statusCards.getLayout()).show(statusCards, hasProfiles ? STATUS_CARD_TABLE : STATUS_CARD_EMPTY);
+            statusFilterPanel.setVisible(hasProfiles);
+        }
+        if (!credentialRequestInProgress) {
+            requestCredentialsButton.setEnabled(hasProfiles);
+        }
+    }
+
+    private void importFromIdentityProvider() {
+        ImportRolesDialog dialog = newImportRolesDialog();
+        dialog.setVisible(true);
+        if (dialog.getImportedCount() > 0) {
+            loadProfiles();
+            refreshStatusTable();
+        }
+    }
+
+    private void addProfileFromEmptyState() {
+        ProfileEditDialog dialog = new ProfileEditDialog(this, configManager, null);
+        dialog.setVisible(true);
+        if (dialog.isSaved()) {
+            loadProfiles();
+            refreshStatusTable();
+        }
     }
 
     /** Reapplies the size/position saved by {@link #saveWindowBounds()}, if it still fits on a connected screen. */
@@ -1198,6 +1333,7 @@ public class SwingMain extends JFrame {
             maybeAutoRenewPinnedProfiles();
             updateTrayMenu();
             updateTrayTooltip();
+            updateEmptyState();
         } catch (Exception e) {
             if (!credentialRequestInProgress) {
                 statusLabel.setText("Failed to update status table: " + e.getMessage());
@@ -1320,6 +1456,7 @@ public class SwingMain extends JFrame {
                 "Configuration Error",
                 JOptionPane.ERROR_MESSAGE);
         }
+        updateEmptyState();
     }
 
     private void saveLastUsedProfile() {
