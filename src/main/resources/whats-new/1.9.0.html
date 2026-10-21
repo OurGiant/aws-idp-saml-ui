@@ -1,0 +1,38 @@
+<h2>Version 1.9.0</h2>
+
+<h3>Easier to get started</h3>
+<ul>
+  <li><b>A new setup wizard.</b> First-run setup is now a few short steps: connect to your identity provider, then add your AWS accounts. Adding accounts is <b>optional</b>; skip it and add them later.</li>
+  <li><b>Import your accounts instead of typing them.</b> In the wizard, <i>Import from your identity provider</i> signs in once and lists every AWS role you have to tick. You can also add one account by hand.</li>
+  <li><b>Start from your team's profile file.</b> Choose <i>Import a profile file from my team</i> on the first screen to use a file exported with <i>File &rarr; Export Profiles</i>.</li>
+  <li><b>Test Sign-in</b> checks your identity provider details before you go on, and keeps the roles it finds so you don't have to sign in twice.</li>
+  <li><b>Detect the login page title.</b> Click <i>Detect...</i> next to <i>Login page title</i> and the app opens your login page and fills it in, so there's nothing to guess.</li>
+  <li><b>Always a next step.</b> With no accounts yet, the main window shows what to do: add an identity provider, import from it, add a profile, or import a profile file.</li>
+</ul>
+
+<h3>Manage identity providers</h3>
+<ul>
+  <li><b>File &rarr; Identity Providers</b> lists your identity providers and how many profiles use each. Add, edit, rename, duplicate and delete them without editing <code>~/.aws/samlsts</code>, and choose the default for new profiles.</li>
+  <li><b>Renaming is safe.</b> Every profile that uses the provider is updated with it. The editor shows the IAM provider ARN as you type, since the name has to match the SAML provider in IAM.</li>
+  <li><b>Deleting is safe.</b> If profiles still use the provider, you choose whether to move them to another one or delete them too.</li>
+  <li>Identity providers are shown by name everywhere, e.g. <i>CorpOkta</i> rather than <i>Fed-CorpOkta</i>.</li>
+</ul>
+
+<h3>Settings</h3>
+<ul>
+  <li><b>Username and default region</b> can now be changed in <i>File &rarr; Configuration</i>. Before, they could only be set during first-run setup.</li>
+</ul>
+
+<h3>Also new since 1.8.0</h3>
+<ul>
+  <li><b>Choose a region from a list</b> in <i>Manage Profiles &rarr; Edit</i>, with names like <i>US East (N. Virginia)</i>, instead of typing it.</li>
+  <li><b>Import from IdP shows account aliases</b> when AWS provides them, and suggests profile names based on them.</li>
+  <li>With <b>Show browser</b> ticked, the browser lands on the profile's <i>Open Console to</i> page after sign-in.</li>
+</ul>
+
+<h3>Fixes</h3>
+<ul>
+  <li>Editing a profile that uses the default identity provider no longer switches it to a different provider when you save.</li>
+  <li>The session duration chosen during first-run setup now takes effect.</li>
+  <li>Sign-in errors about a missing or incomplete identity provider now say where to fix it.</li>
+</ul>
