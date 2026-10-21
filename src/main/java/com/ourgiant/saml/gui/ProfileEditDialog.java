@@ -68,6 +68,8 @@ public class ProfileEditDialog extends JDialog {
             loadExistingProfile(profileName);
         } else if (template != null) {
             loadFields(template, true);
+        } else if (configManager.getDefaultProvider() != null) {
+            samlProviderCombo.setSelectedItem(configManager.getDefaultProvider());
         }
         pack();
         setMinimumSize(new Dimension(380, getHeight()));

@@ -76,15 +76,22 @@ public class ProfileManagerDialog extends JDialog {
         importButton.setMnemonic(KeyEvent.VK_I);
         importButton.setToolTipText("Log in to an identity provider once and create profiles from the AWS roles it grants you");
         importButton.setVisible(importDialogFactory != null);
+        JButton providersButton = new JButton("Identity Providers...");
+        providersButton.setMnemonic(KeyEvent.VK_P);
+        providersButton.setToolTipText("Add, edit or delete the identity providers profiles sign in through");
+        providersButton.addActionListener(e -> showIdentityProviders());
         addButton.addActionListener(e -> onAdd());
         editButton.addActionListener(e -> onEdit());
         deleteButton.addActionListener(e -> onDelete());
         duplicateButton.addActionListener(e -> onDuplicate());
         importButton.addActionListener(e -> onImport());
 
-        for (JButton button : new JButton[]{addButton, editButton, duplicateButton, deleteButton, importButton}) {
+        for (JButton button : new JButton[]{addButton, editButton, duplicateButton, deleteButton, importButton, providersButton}) {
             button.setAlignmentX(Component.LEFT_ALIGNMENT);
             button.setMaximumSize(new Dimension(Integer.MAX_VALUE, button.getPreferredSize().height));
+            if (button == providersButton) {
+                sideButtonPanel.add(Box.createVerticalStrut(8));
+            }
             sideButtonPanel.add(button);
             sideButtonPanel.add(Box.createVerticalStrut(6));
         }
@@ -112,11 +119,7 @@ public class ProfileManagerDialog extends JDialog {
     }
 
     private void onAdd() {
-        if (configManager.getIdpProviders().isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                "No identity providers are configured. Add one to ~/.aws/samlsts before creating a profile.",
-                "No Identity Providers",
-                JOptionPane.WARNING_MESSAGE);
+        if (!ensureIdentityProvider("creating a profile")) {
             return;
         }
 
@@ -129,11 +132,7 @@ public class ProfileManagerDialog extends JDialog {
     }
 
     private void onImport() {
-        if (configManager.getIdpProviders().isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                "No identity providers are configured. Add one to ~/.aws/samlsts before importing profiles.",
-                "No Identity Providers",
-                JOptionPane.WARNING_MESSAGE);
+        if (!ensureIdentityProvider("importing profiles")) {
             return;
         }
 
@@ -143,6 +142,36 @@ public class ProfileManagerDialog extends JDialog {
             profilesChanged = true;
             loadProfileList();
         }
+    }
+
+    /** Opens the Identity Providers screen (#249). */
+    private void showIdentityProviders() {
+        IdentityProvidersDialog dialog = new IdentityProvidersDialog(this, configManager, importDialogFactory);
+        dialog.setVisible(true);
+        if (dialog.isChanged()) {
+            profilesChanged = true;
+            loadProfileList();
+        }
+    }
+
+    /**
+     * True if at least one identity provider exists. Otherwise offers to add one on the
+     * Identity Providers screen, and returns whether there is one afterwards.
+     */
+    private boolean ensureIdentityProvider(String beforeWhat) {
+        if (!configManager.getIdpProviders().isEmpty()) {
+            return true;
+        }
+        int choice = JOptionPane.showConfirmDialog(this,
+            "No identity providers are set up yet. Add one before " + beforeWhat + "?",
+            "No Identity Providers",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.INFORMATION_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) {
+            return false;
+        }
+        showIdentityProviders();
+        return !configManager.getIdpProviders().isEmpty();
     }
 
     private void onEdit() {

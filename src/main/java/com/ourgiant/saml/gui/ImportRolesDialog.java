@@ -57,12 +57,20 @@ public class ImportRolesDialog extends JDialog {
         this.authenticatorFactory = authenticatorFactory;
         this.useFastPass = useFastPass;
         this.providerCombo = new JComboBox<>(configManager.getIdpProviders().toArray(new String[0]));
+        if (configManager.getDefaultProvider() != null) {
+            providerCombo.setSelectedItem(configManager.getDefaultProvider());
+        }
         showBrowserCheckBox.setSelected(showBrowser);
 
         initializeUI();
         pack();
         setMinimumSize(new Dimension(760, 420));
         setLocationRelativeTo(parent);
+    }
+
+    /** Pre-selects the identity provider to log in to, e.g. when opened from the Identity Providers screen. */
+    public void selectProvider(String providerSection) {
+        providerCombo.setSelectedItem(providerSection);
     }
 
     /** Number of profiles created; 0 if the dialog was closed without importing. */
